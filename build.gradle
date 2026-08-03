@@ -60,6 +60,10 @@ tasks.register('questScriptSelfTest', JavaExec) {
     mainClass = 'dev.aether.questledger.questscript.QuestScriptSelfTest'
 }
 
+tasks.named('test') {
+    failOnNoDiscoveredTests = false
+}
+
 check.dependsOn tasks.named('questScriptSelfTest')
 
 publishing {
