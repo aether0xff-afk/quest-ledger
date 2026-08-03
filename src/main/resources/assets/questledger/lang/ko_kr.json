@@ -1,0 +1,9 @@
+{
+  "key.questledger.open": "퀘스트 장부 열기",
+  "category.questledger": "Quest Ledger",
+  "screen.questledger.title": "퀘스트 장부",
+  "screen.questledger.builder": "조건 구성",
+  "screen.questledger.code": "QuestScript",
+  "screen.questledger.save": "퀘스트 저장",
+  "screen.questledger.cancel": "취소"
+}

@@ -1,0 +1,9 @@
+{
+  "key.questledger.open": "Open Quest Ledger",
+  "category.questledger": "Quest Ledger",
+  "screen.questledger.title": "Quest Ledger",
+  "screen.questledger.builder": "Condition Builder",
+  "screen.questledger.code": "QuestScript",
+  "screen.questledger.save": "Save Quest",
+  "screen.questledger.cancel": "Cancel"
+}
