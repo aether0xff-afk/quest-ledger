@@ -8,7 +8,7 @@ import dev.aether.questledger.questscript.ast.QuestDefinition;
 import dev.aether.questledger.questscript.ast.QuestFile;
 import dev.aether.questledger.questscript.validation.Diagnostic;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
