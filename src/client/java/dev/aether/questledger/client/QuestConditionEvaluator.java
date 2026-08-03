@@ -52,33 +52,17 @@ public final class QuestConditionEvaluator {
             return unknownFrom(operand, "not requires a boolean value.");
         }
         if (expression instanceof Expression.Logical logical) {
-            Value left = valueOf(logical.left(), minecraft, player);
-            if (!(left instanceof Value.BooleanValue leftBoolean)) {
-                return unknownFrom(left, "Logical operator requires booleans.");
-            }
-
-            if (logical.operator() == LogicalOperator.AND && !leftBoolean.value()) {
-                return new Value.BooleanValue(false);
-            }
-            if (logical.operator() == LogicalOperator.OR && leftBoolean.value()) {
-                return new Value.BooleanValue(true);
-            }
-
-            Value right = valueOf(logical.right(), minecraft, player);
-            if (!(right instanceof Value.BooleanValue rightBoolean)) {
-                return unknownFrom(right, "Logical operator requires booleans.");
-            }
-            return new Value.BooleanValue(logical.operator() == LogicalOperator.AND
-                    ? leftBoolean.value() && rightBoolean.value()
-                    : leftBoolean.value() || rightBoolean.value());
+            return logicalValue(logical, minecraft, player);
         }
         if (expression instanceof Expression.Comparison comparison) {
-            Value left = valueOf(comparison.left(), minecraft, player);
-            Value right = valueOf(comparison.right(), minecraft, player);
-            return compare(left, comparison.operator(), right);
+            return compare(
+                    valueOf(comparison.left(), minecraft, player),
+                    comparison.operator(),
+                    valueOf(comparison.right(), minecraft, player)
+            );
         }
         if (expression instanceof Expression.Reference reference) {
-            return referenceValue(reference.qualifiedName(), minecraft, player);
+            return referenceValue(reference.qualifiedName(), player);
         }
         if (expression instanceof Expression.Call call) {
             return callValue(call, minecraft, player);
@@ -86,7 +70,33 @@ public final class QuestConditionEvaluator {
         return new Value.UnknownValue("Unsupported expression node.");
     }
 
-    private Value referenceValue(String name, Minecraft minecraft, LocalPlayer player) {
+    private Value logicalValue(
+            Expression.Logical logical,
+            Minecraft minecraft,
+            LocalPlayer player
+    ) {
+        Value left = valueOf(logical.left(), minecraft, player);
+        if (!(left instanceof Value.BooleanValue leftBoolean)) {
+            return unknownFrom(left, "Logical operator requires booleans.");
+        }
+
+        if (logical.operator() == LogicalOperator.AND && !leftBoolean.value()) {
+            return new Value.BooleanValue(false);
+        }
+        if (logical.operator() == LogicalOperator.OR && leftBoolean.value()) {
+            return new Value.BooleanValue(true);
+        }
+
+        Value right = valueOf(logical.right(), minecraft, player);
+        if (!(right instanceof Value.BooleanValue rightBoolean)) {
+            return unknownFrom(right, "Logical operator requires booleans.");
+        }
+        return new Value.BooleanValue(logical.operator() == LogicalOperator.AND
+                ? leftBoolean.value() && rightBoolean.value()
+                : leftBoolean.value() || rightBoolean.value());
+    }
+
+    private Value referenceValue(String name, LocalPlayer player) {
         return switch (name) {
             case "player.health" -> new Value.NumberValue(player.getHealth());
             case "player.max_health" -> new Value.NumberValue(player.getMaxHealth());
@@ -101,11 +111,11 @@ public final class QuestConditionEvaluator {
             case "player.on_ground" -> new Value.BooleanValue(player.onGround());
             case "player.is_sneaking" -> new Value.BooleanValue(player.isShiftKeyDown());
             case "player.is_sprinting" -> new Value.BooleanValue(player.isSprinting());
-            case "world.time" -> new Value.NumberValue(dayTime(minecraft));
-            case "world.day" -> new Value.NumberValue(dayTime(minecraft) / 24_000L);
-            case "world.is_day" -> new Value.BooleanValue(isDay(minecraft));
-            case "world.is_night" -> new Value.BooleanValue(!isDay(minecraft));
             case "manual.checked" -> new Value.BooleanValue(false);
+            case "world.time", "world.day", "world.is_day", "world.is_night" ->
+                    new Value.UnknownValue(
+                            "World clock conditions are pending Minecraft 26.2 timeline support."
+                    );
             default -> new Value.UnknownValue("Runtime property is not implemented: " + name);
         };
     }
@@ -131,8 +141,16 @@ public final class QuestConditionEvaluator {
             case "stat.mined" -> blockStat(player, stringArgument(arguments, 0));
             case "stat.used" -> itemStat(player, stringArgument(arguments, 0), StatKind.USED);
             case "stat.crafted" -> itemStat(player, stringArgument(arguments, 0), StatKind.CRAFTED);
-            case "stat.picked_up" -> itemStat(player, stringArgument(arguments, 0), StatKind.PICKED_UP);
-            case "stat.dropped" -> itemStat(player, stringArgument(arguments, 0), StatKind.DROPPED);
+            case "stat.picked_up" -> itemStat(
+                    player,
+                    stringArgument(arguments, 0),
+                    StatKind.PICKED_UP
+            );
+            case "stat.dropped" -> itemStat(
+                    player,
+                    stringArgument(arguments, 0),
+                    StatKind.DROPPED
+            );
             case "stat.killed" -> entityStat(player, stringArgument(arguments, 0));
             case "distance.to" -> distanceTo(player, arguments);
             case "inside.box" -> insideBox(player, arguments);
@@ -161,8 +179,7 @@ public final class QuestConditionEvaluator {
             return new Value.UnknownValue("Unknown or unsupported item ID: " + idText);
         }
         for (EquipmentSlot slot : EquipmentSlot.values()) {
-            ItemStack stack = player.getItemBySlot(slot);
-            if (stack.is(item.get())) {
+            if (player.getItemBySlot(slot).is(item.get())) {
                 return new Value.BooleanValue(true);
             }
         }
@@ -192,7 +209,9 @@ public final class QuestConditionEvaluator {
         if (block.isEmpty()) {
             return new Value.UnknownValue("Unknown block ID: " + idText);
         }
-        return new Value.NumberValue(player.getStats().getValue(Stats.BLOCK_MINED.get(block.get())));
+        return new Value.NumberValue(
+                player.getStats().getValue(Stats.BLOCK_MINED.get(block.get()))
+        );
     }
 
     private Value itemStat(LocalPlayer player, String idText, StatKind kind) {
@@ -218,7 +237,9 @@ public final class QuestConditionEvaluator {
         if (entity.isEmpty()) {
             return new Value.UnknownValue("Unknown entity ID: " + idText);
         }
-        return new Value.NumberValue(player.getStats().getValue(Stats.ENTITY_KILLED.get(entity.get())));
+        return new Value.NumberValue(
+                player.getStats().getValue(Stats.ENTITY_KILLED.get(entity.get()))
+        );
     }
 
     private Value distanceTo(LocalPlayer player, List<Value> arguments) {
@@ -244,13 +265,16 @@ public final class QuestConditionEvaluator {
 
     private Value insideRadius(LocalPlayer player, List<Value> arguments) {
         double radius = numberArgument(arguments, 3);
-        Value distance = distanceTo(player, arguments.subList(0, 3));
-        return booleanFromNumber(distance, value -> value <= radius);
+        return booleanFromNumber(
+                distanceTo(player, arguments.subList(0, 3)),
+                value -> value <= radius
+        );
     }
 
     private Value questActive(String idOrTitle) {
         boolean active = ClientQuestStore.snapshot().quests().stream().anyMatch(quest ->
-                quest.id().map(idOrTitle::equals).orElse(false) || quest.title().equals(idOrTitle)
+                quest.id().map(idOrTitle::equals).orElse(false)
+                        || quest.title().equals(idOrTitle)
         );
         return new Value.BooleanValue(active);
     }
@@ -263,15 +287,6 @@ public final class QuestConditionEvaluator {
         return id == null ? Optional.empty() : BuiltInRegistries.ITEM.getOptional(id);
     }
 
-    private long dayTime(Minecraft minecraft) {
-        return minecraft.level.getLevelData().getTimeOfDay();
-    }
-
-    private boolean isDay(Minecraft minecraft) {
-        long timeOfDay = Math.floorMod(dayTime(minecraft), 24_000L);
-        return timeOfDay < 13_000L;
-    }
-
     private Value compare(Value left, ComparisonOperator operator, Value right) {
         if (left instanceof Value.UnknownValue unknown) {
             return unknown;
@@ -281,8 +296,10 @@ public final class QuestConditionEvaluator {
         }
         if (left instanceof Value.NumberValue leftNumber
                 && right instanceof Value.NumberValue rightNumber) {
-            double comparison = Double.compare(leftNumber.value(), rightNumber.value());
-            return new Value.BooleanValue(compareNumber(comparison, operator));
+            return new Value.BooleanValue(compareNumber(
+                    Double.compare(leftNumber.value(), rightNumber.value()),
+                    operator
+            ));
         }
         if (left instanceof Value.StringValue leftString
                 && right instanceof Value.StringValue rightString) {
@@ -310,7 +327,9 @@ public final class QuestConditionEvaluator {
         return switch (operator) {
             case EQUAL -> new Value.BooleanValue(equal);
             case NOT_EQUAL -> new Value.BooleanValue(!equal);
-            default -> new Value.UnknownValue("Only == and != are valid for this runtime value.");
+            default -> new Value.UnknownValue(
+                    "Only == and != are valid for this runtime value."
+            );
         };
     }
 
@@ -336,7 +355,8 @@ public final class QuestConditionEvaluator {
     }
 
     private boolean between(double value, double endpointA, double endpointB) {
-        return value >= Math.min(endpointA, endpointB) && value <= Math.max(endpointA, endpointB);
+        return value >= Math.min(endpointA, endpointB)
+                && value <= Math.max(endpointA, endpointB);
     }
 
     private enum StatKind {
