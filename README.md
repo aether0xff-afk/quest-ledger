@@ -11,17 +11,19 @@ The mod itself does **not** connect to or run an LLM. QuestScript can be copied 
 
 ## Current milestone
 
-This repository currently contains the 26.2 Fabric project foundation and the first QuestScript language core:
+Quest Ledger currently includes:
 
-- lexer and parser;
-- typed AST shared by both editor modes;
-- semantic validation with a whitelist of properties and functions;
-- canonical source formatter;
-- self-test executed by Gradle `check`;
-- Korean and English localization foundations;
-- design and language documentation.
+- a `Q` key binding that opens a medieval parchment ledger;
+- Builder and QuestScript editor tabs backed by the same typed AST;
+- parsing and semantic validation before save or mode conversion;
+- Builder conditions for inventory items, mined blocks, and killed mobs;
+- canonical QuestScript persistence in the Fabric configuration directory;
+- an animated HUD showing up to three active quests;
+- Korean and English localization;
+- backend-neutral GUI rendering for both Vulkan and OpenGL;
+- parser self-tests and a GitHub Actions build.
 
-The in-game medieval UI, HUD, persistence, and event-driven condition evaluator are the next implementation milestone.
+Runtime condition evaluation, automatic completion, completion history, and final completion effects are the next milestone.
 
 ## Toolchain
 
@@ -32,19 +34,23 @@ The in-game medieval UI, HUD, persistence, and event-driven condition evaluator 
 - Gradle: `9.5.1`
 - Java: `25`
 
-Minecraft 26.2 uses an optional Vulkan backend, so rendering code must use Minecraft/Blaze3D abstractions rather than raw OpenGL.
+Minecraft 26.2 can use either Vulkan or OpenGL. Quest Ledger therefore renders through Minecraft/Blaze3D abstractions and Fabric HUD APIs instead of calling either graphics backend directly. See [`docs/RENDERING_BACKENDS.md`](docs/RENDERING_BACKENDS.md).
 
 ## Build
 
-Install JDK 25 and Gradle 9.5.1, then run:
+Install JDK 25, then run:
 
 ```shell
-gradle build
+./gradlew build
 ```
 
-The mod JAR is produced in `build/libs/`.
+On Windows:
 
-The Gradle wrapper will be added after the initial repository bootstrap; until then use a local Gradle installation matching the version above.
+```powershell
+.\gradlew.bat build
+```
+
+The remapped mod JAR is produced in `build/libs/`.
 
 ## Small example
 
@@ -64,7 +70,7 @@ quest "네더라이트 하나 더" {
 }
 ```
 
-See [`docs/QUESTSCRIPT.md`](docs/QUESTSCRIPT.md) and [`docs/ASK_GPT.md`](docs/ASK_GPT.md).
+See [`docs/QUESTSCRIPT.md`](docs/QUESTSCRIPT.md), [`docs/ASK_GPT.md`](docs/ASK_GPT.md), and [`docs/EDITOR_MODES.md`](docs/EDITOR_MODES.md).
 
 ## License
 
