@@ -9,6 +9,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
@@ -100,10 +101,10 @@ public final class QuestConditionEvaluator {
             case "player.on_ground" -> new Value.BooleanValue(player.onGround());
             case "player.is_sneaking" -> new Value.BooleanValue(player.isShiftKeyDown());
             case "player.is_sprinting" -> new Value.BooleanValue(player.isSprinting());
-            case "world.time" -> new Value.NumberValue(minecraft.level.getDayTime());
-            case "world.day" -> new Value.NumberValue(minecraft.level.getDayTime() / 24_000L);
-            case "world.is_day" -> new Value.BooleanValue(minecraft.level.isDay());
-            case "world.is_night" -> new Value.BooleanValue(!minecraft.level.isDay());
+            case "world.time" -> new Value.NumberValue(dayTime(minecraft));
+            case "world.day" -> new Value.NumberValue(dayTime(minecraft) / 24_000L);
+            case "world.is_day" -> new Value.BooleanValue(isDay(minecraft));
+            case "world.is_night" -> new Value.BooleanValue(!isDay(minecraft));
             case "manual.checked" -> new Value.BooleanValue(false);
             default -> new Value.UnknownValue("Runtime property is not implemented: " + name);
         };
@@ -159,14 +160,13 @@ public final class QuestConditionEvaluator {
         if (item.isEmpty()) {
             return new Value.UnknownValue("Unknown or unsupported item ID: " + idText);
         }
-        for (ItemStack stack : player.getArmorSlots()) {
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            ItemStack stack = player.getItemBySlot(slot);
             if (stack.is(item.get())) {
                 return new Value.BooleanValue(true);
             }
         }
-        return new Value.BooleanValue(
-                player.getMainHandItem().is(item.get()) || player.getOffhandItem().is(item.get())
-        );
+        return new Value.BooleanValue(false);
     }
 
     private Value durability(LocalPlayer player, String idText) {
@@ -261,6 +261,15 @@ public final class QuestConditionEvaluator {
         }
         Identifier id = Identifier.tryParse(idText);
         return id == null ? Optional.empty() : BuiltInRegistries.ITEM.getOptional(id);
+    }
+
+    private long dayTime(Minecraft minecraft) {
+        return minecraft.level.getLevelData().getDayTime();
+    }
+
+    private boolean isDay(Minecraft minecraft) {
+        long timeOfDay = Math.floorMod(dayTime(minecraft), 24_000L);
+        return timeOfDay < 13_000L;
     }
 
     private Value compare(Value left, ComparisonOperator operator, Value right) {
