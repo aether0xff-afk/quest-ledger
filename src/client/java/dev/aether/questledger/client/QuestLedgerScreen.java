@@ -41,11 +41,6 @@ public final class QuestLedgerScreen extends Screen {
     private EditBox amountField;
     private MultiLineEditBox codeEditor;
 
-    private Button conditionButton;
-    private Button operatorButton;
-    private Button animationButton;
-    private Button hudButton;
-
     public QuestLedgerScreen(Screen parent) {
         this(parent, new QuestEditorModel(), Mode.BUILDER, Component.empty(), false);
     }
@@ -72,122 +67,116 @@ public final class QuestLedgerScreen extends Screen {
         this.panelLeft = (this.width - this.panelWidth) / 2;
         this.panelTop = (this.height - this.panelHeight) / 2;
 
-        int tabY = this.panelTop + 30;
-        int halfTab = (this.panelWidth - 54) / 2;
+        addTabs();
+        if (this.mode == Mode.BUILDER) {
+            addBuilderWidgets();
+        } else {
+            addCodeEditor();
+        }
+        addFooterButtons();
+    }
 
-        Button builderTab = Button.builder(
+    private void addTabs() {
+        int y = this.panelTop + 30;
+        int width = (this.panelWidth - 54) / 2;
+
+        Button builder = Button.builder(
                 Component.translatable("screen.questledger.builder"),
                 button -> switchToBuilder()
-        ).bounds(this.panelLeft + 22, tabY, halfTab, 20).build();
-        builderTab.active = this.mode != Mode.BUILDER;
-        this.addRenderableWidget(builderTab);
+        ).bounds(this.panelLeft + 22, y, width, 20).build();
+        builder.active = this.mode != Mode.BUILDER;
+        this.addRenderableWidget(builder);
 
-        Button codeTab = Button.builder(
+        Button code = Button.builder(
                 Component.translatable("screen.questledger.code"),
                 button -> switchToCode()
-        ).bounds(this.panelLeft + 32 + halfTab, tabY, halfTab, 20).build();
-        codeTab.active = this.mode != Mode.CODE;
-        this.addRenderableWidget(codeTab);
+        ).bounds(this.panelLeft + 32 + width, y, width, 20).build();
+        code.active = this.mode != Mode.CODE;
+        this.addRenderableWidget(code);
+    }
 
-        if (this.mode == Mode.BUILDER) {
-            initBuilderWidgets();
-        } else {
-            initCodeWidgets();
-        }
-
-        int footerY = this.panelTop + this.panelHeight - 32;
+    private void addFooterButtons() {
+        int y = this.panelTop + this.panelHeight - 32;
         this.addRenderableWidget(Button.builder(
                 Component.translatable("screen.questledger.save"),
                 button -> saveQuest()
-        ).bounds(this.panelLeft + this.panelWidth - 218, footerY, 96, 20).build());
-
+        ).bounds(this.panelLeft + this.panelWidth - 218, y, 96, 20).build());
         this.addRenderableWidget(Button.builder(
                 Component.translatable("screen.questledger.cancel"),
                 button -> onClose()
-        ).bounds(this.panelLeft + this.panelWidth - 114, footerY, 92, 20).build());
+        ).bounds(this.panelLeft + this.panelWidth - 114, y, 92, 20).build());
     }
 
-    private void initBuilderWidgets() {
+    private void addBuilderWidgets() {
         int x = this.panelLeft + 154;
         int y = this.panelTop + 67;
-        int fieldWidth = this.panelWidth - 178;
+        int width = this.panelWidth - 178;
 
-        this.titleField = new EditBox(
-                this.font, x, y, fieldWidth, 20,
-                Component.translatable("screen.questledger.field.title")
-        );
-        this.titleField.setValue(this.model.title());
-        this.addRenderableWidget(this.titleField);
+        this.titleField = textField(x, y, width, "screen.questledger.field.title", this.model.title());
 
         y += 32;
-        this.conditionButton = this.addRenderableWidget(Button.builder(
-                conditionLabel(),
-                button -> {
-                    syncBuilderFields();
-                    this.model.cycleConditionKind();
-                    button.setMessage(conditionLabel());
-                }
-        ).bounds(x, y, fieldWidth, 20).build());
+        this.addRenderableWidget(Button.builder(conditionLabel(), button -> {
+            syncBuilderFields();
+            this.model.cycleConditionKind();
+            button.setMessage(conditionLabel());
+        }).bounds(x, y, width, 20).build());
 
         y += 32;
-        this.targetField = new EditBox(
-                this.font, x, y, fieldWidth, 20,
-                Component.translatable("screen.questledger.field.target")
-        );
-        this.targetField.setValue(this.model.targetId());
-        this.addRenderableWidget(this.targetField);
+        this.targetField = textField(x, y, width, "screen.questledger.field.target", this.model.targetId());
 
         y += 32;
-        this.operatorButton = this.addRenderableWidget(Button.builder(
+        this.addRenderableWidget(Button.builder(
                 Component.literal(this.model.operator().symbol()),
                 button -> {
                     this.model.cycleOperator();
                     button.setMessage(Component.literal(this.model.operator().symbol()));
                 }
         ).bounds(x, y, 54, 20).build());
-
         this.addRenderableWidget(Button.builder(
                 Component.literal("−"),
                 button -> adjustAmount(-1)
         ).bounds(x + 62, y, 28, 20).build());
-
-        this.amountField = new EditBox(
-                this.font, x + 96, y, Math.max(54, fieldWidth - 130), 20,
-                Component.translatable("screen.questledger.field.amount")
+        this.amountField = textField(
+                x + 96,
+                y,
+                Math.max(54, width - 130),
+                "screen.questledger.field.amount",
+                Integer.toString(this.model.amount())
         );
-        this.amountField.setValue(Integer.toString(this.model.amount()));
-        this.addRenderableWidget(this.amountField);
-
         this.addRenderableWidget(Button.builder(
                 Component.literal("+"),
                 button -> adjustAmount(1)
-        ).bounds(x + fieldWidth - 28, y, 28, 20).build());
+        ).bounds(x + width - 28, y, 28, 20).build());
 
         y += 32;
-        this.animationButton = this.addRenderableWidget(Button.builder(
-                animationLabel(),
-                button -> {
-                    this.model.cycleAnimation();
-                    button.setMessage(animationLabel());
-                }
-        ).bounds(x, y, fieldWidth, 20).build());
+        this.addRenderableWidget(Button.builder(animationLabel(), button -> {
+            this.model.cycleAnimation();
+            button.setMessage(animationLabel());
+        }).bounds(x, y, width, 20).build());
 
         y += 32;
-        this.hudButton = this.addRenderableWidget(Button.builder(
-                hudLabel(),
-                button -> {
-                    this.model.toggleHudVisible();
-                    button.setMessage(hudLabel());
-                }
-        ).bounds(x, y, fieldWidth, 20).build());
+        this.addRenderableWidget(Button.builder(hudLabel(), button -> {
+            this.model.toggleHudVisible();
+            button.setMessage(hudLabel());
+        }).bounds(x, y, width, 20).build());
     }
 
-    private void initCodeWidgets() {
+    private EditBox textField(int x, int y, int width, String narrationKey, String value) {
+        EditBox field = new EditBox(
+                this.font,
+                x,
+                y,
+                width,
+                20,
+                Component.translatable(narrationKey)
+        );
+        field.setValue(value);
+        return this.addRenderableWidget(field);
+    }
+
+    private void addCodeEditor() {
         int x = this.panelLeft + 24;
         int y = this.panelTop + 67;
-        int editorWidth = this.panelWidth - 48;
-        int editorHeight = this.panelHeight - 119;
-
         this.codeEditor = MultiLineEditBox.builder()
                 .setShowDecorations(false)
                 .setShowBackground(false)
@@ -196,8 +185,12 @@ public final class QuestLedgerScreen extends Screen {
                 .setTextShadow(false)
                 .setX(x)
                 .setY(y)
-                .build(this.font, editorWidth, editorHeight,
-                        Component.translatable("screen.questledger.code.placeholder"));
+                .build(
+                        this.font,
+                        this.panelWidth - 48,
+                        this.panelHeight - 119,
+                        Component.translatable("screen.questledger.code.placeholder")
+                );
         this.codeEditor.setCharacterLimit(16_384);
         this.codeEditor.setLineLimit(128);
         this.codeEditor.setValue(this.model.codeSource());
@@ -207,28 +200,32 @@ public final class QuestLedgerScreen extends Screen {
     private void switchToCode() {
         syncBuilderFields();
         this.model.codeSource(this.model.toCanonicalSource());
-        this.minecraft.setScreen(new QuestLedgerScreen(
-                this.parent, this.model, Mode.CODE, Component.empty(), false
-        ));
+        show(new QuestLedgerScreen(this.parent, this.model, Mode.CODE, Component.empty(), false));
     }
 
     private void switchToBuilder() {
         if (this.codeEditor != null) {
-            this.model.codeSource(this.codeEditor.value());
+            this.model.codeSource(this.codeEditor.getValue());
             try {
                 QuestScript.ParsedQuestScript parsed = QuestScript.parseAndValidate(this.model.codeSource());
                 if (!parsed.validation().valid()) {
                     var diagnostic = parsed.validation().diagnostics().getFirst();
-                    reopenCode(Component.literal(diagnostic.code() + ": " + diagnostic.message()), true);
+                    reopenCode(Component.literal(
+                            diagnostic.code() + ": " + diagnostic.message()
+                    ), true);
                     return;
                 }
                 if (parsed.file().quests().size() != 1) {
-                    reopenCode(Component.translatable("screen.questledger.error.single_quest"), true);
+                    reopenCode(Component.translatable(
+                            "screen.questledger.error.single_quest"
+                    ), true);
                     return;
                 }
                 QuestDefinition quest = parsed.file().quests().getFirst();
                 if (!this.model.importQuest(quest)) {
-                    reopenCode(Component.translatable("screen.questledger.error.builder_subset"), true);
+                    reopenCode(Component.translatable(
+                            "screen.questledger.error.builder_subset"
+                    ), true);
                     return;
                 }
             } catch (QuestScriptException exception) {
@@ -237,15 +234,11 @@ public final class QuestLedgerScreen extends Screen {
             }
         }
 
-        this.minecraft.setScreen(new QuestLedgerScreen(
-                this.parent, this.model, Mode.BUILDER, Component.empty(), false
-        ));
+        show(new QuestLedgerScreen(this.parent, this.model, Mode.BUILDER, Component.empty(), false));
     }
 
     private void reopenCode(Component message, boolean error) {
-        this.minecraft.setScreen(new QuestLedgerScreen(
-                this.parent, this.model, Mode.CODE, message, error
-        ));
+        show(new QuestLedgerScreen(this.parent, this.model, Mode.CODE, message, error));
     }
 
     private void saveQuest() {
@@ -254,25 +247,30 @@ public final class QuestLedgerScreen extends Screen {
             syncBuilderFields();
             result = ClientQuestStore.append(this.model.toCanonicalSource());
         } else {
-            this.model.codeSource(this.codeEditor.value());
+            this.model.codeSource(this.codeEditor.getValue());
             result = ClientQuestStore.append(this.model.codeSource());
             if (result.success()) {
                 try {
-                    var parsed = QuestScript.parse(this.model.codeSource());
-                    this.model.codeSource(new QuestScriptFormatter().format(parsed));
+                    this.model.codeSource(new QuestScriptFormatter().format(
+                            QuestScript.parse(this.model.codeSource())
+                    ));
                 } catch (QuestScriptException ignored) {
-                    // append already returned success, so this is defensive only.
+                    // append already validated this source.
                 }
             }
         }
 
-        this.minecraft.setScreen(new QuestLedgerScreen(
+        show(new QuestLedgerScreen(
                 this.parent,
                 this.model,
                 this.mode,
                 Component.literal(result.message()),
                 !result.success()
         ));
+    }
+
+    private void show(Screen screen) {
+        this.minecraft.gui.setScreen(screen);
     }
 
     private void syncBuilderFields() {
@@ -298,29 +296,35 @@ public final class QuestLedgerScreen extends Screen {
     }
 
     private Component conditionLabel() {
-        return Component.translatable("screen.questledger.condition."
-                + this.model.conditionKind().name().toLowerCase());
+        return Component.translatable(
+                "screen.questledger.condition."
+                        + this.model.conditionKind().name().toLowerCase()
+        );
     }
 
     private Component animationLabel() {
         return Component.translatable(
                 "screen.questledger.animation",
-                Component.translatable("screen.questledger.animation."
-                        + this.model.animation().name().toLowerCase())
+                Component.translatable(
+                        "screen.questledger.animation."
+                                + this.model.animation().name().toLowerCase()
+                )
         );
     }
 
     private Component hudLabel() {
         return Component.translatable(
                 "screen.questledger.hud",
-                Component.translatable(this.model.hudVisible()
-                        ? "screen.questledger.on"
-                        : "screen.questledger.off")
+                Component.translatable(
+                        this.model.hudVisible()
+                                ? "screen.questledger.on"
+                                : "screen.questledger.off"
+                )
         );
     }
 
     @Override
-    protected void extractBackground(
+    public void extractBackground(
             GuiGraphicsExtractor graphics,
             int mouseX,
             int mouseY,
@@ -394,31 +398,8 @@ public final class QuestLedgerScreen extends Screen {
         );
 
         if (this.mode == Mode.BUILDER) {
-            int x = this.panelLeft + 24;
-            int y = this.panelTop + 73;
-            graphics.text(this.font, Component.translatable("screen.questledger.field.title"),
-                    x, y, INK, false);
-            graphics.text(this.font, Component.translatable("screen.questledger.field.condition"),
-                    x, y + 32, INK, false);
-            graphics.text(this.font, Component.translatable("screen.questledger.field.target"),
-                    x, y + 64, INK, false);
-            graphics.text(this.font, Component.translatable("screen.questledger.field.amount"),
-                    x, y + 96, INK, false);
-            graphics.text(this.font, Component.translatable("screen.questledger.field.animation"),
-                    x, y + 128, INK, false);
-            graphics.text(this.font, Component.translatable("screen.questledger.field.hud"),
-                    x, y + 160, INK, false);
-
-            String preview = this.model.conditionKind().functionName()
-                    + "(\"" + this.model.targetId() + "\") "
-                    + this.model.operator().symbol() + " " + this.model.amount();
-            graphics.text(this.font, preview,
-                    this.panelLeft + 24,
-                    this.panelTop + this.panelHeight - 54,
-                    MUTED_INK,
-                    false);
+            drawBuilderLabels(graphics);
         }
-
         if (!this.status.getString().isBlank()) {
             graphics.text(
                     this.font,
@@ -431,8 +412,43 @@ public final class QuestLedgerScreen extends Screen {
         }
     }
 
+    private void drawBuilderLabels(GuiGraphicsExtractor graphics) {
+        int x = this.panelLeft + 24;
+        int y = this.panelTop + 73;
+        String[] keys = {
+                "screen.questledger.field.title",
+                "screen.questledger.field.condition",
+                "screen.questledger.field.target",
+                "screen.questledger.field.amount",
+                "screen.questledger.field.animation",
+                "screen.questledger.field.hud"
+        };
+        for (int index = 0; index < keys.length; index++) {
+            graphics.text(
+                    this.font,
+                    Component.translatable(keys[index]),
+                    x,
+                    y + index * 32,
+                    INK,
+                    false
+            );
+        }
+
+        String preview = this.model.conditionKind().functionName()
+                + "(\"" + this.model.targetId() + "\") "
+                + this.model.operator().symbol() + " " + this.model.amount();
+        graphics.text(
+                this.font,
+                preview,
+                this.panelLeft + 24,
+                this.panelTop + this.panelHeight - 54,
+                MUTED_INK,
+                false
+        );
+    }
+
     @Override
     public void onClose() {
-        this.minecraft.setScreen(this.parent);
+        show(this.parent);
     }
 }
