@@ -17,13 +17,18 @@ Quest Ledger currently includes:
 - Builder and QuestScript editor tabs backed by the same typed AST;
 - parsing and semantic validation before save or mode conversion;
 - Builder conditions for inventory items, mined blocks, and killed mobs;
-- canonical QuestScript persistence in the Fabric configuration directory;
+- automatic evaluation of supported QuestScript conditions every five client ticks;
+- `hold` duration handling before a quest is considered complete;
+- `wax_seal`, `ink_check`, and `page_fold` completion effects;
+- automatic removal after the configured `remove after` duration;
+- a completion log at `config/quest-ledger/completed-history.log`;
+- canonical QuestScript persistence at `config/quest-ledger/quests.qs`;
 - an animated HUD showing up to three active quests;
 - Korean and English localization;
 - backend-neutral GUI rendering for both Vulkan and OpenGL;
 - parser self-tests and a GitHub Actions build.
 
-Runtime condition evaluation, automatic completion, completion history, and final completion effects are the next milestone.
+See [`docs/RUNTIME_SUPPORT.md`](docs/RUNTIME_SUPPORT.md) for the exact automatic-completion support matrix and current limitations.
 
 ## Toolchain
 
@@ -71,6 +76,14 @@ quest "네더라이트 하나 더" {
 ```
 
 See [`docs/QUESTSCRIPT.md`](docs/QUESTSCRIPT.md), [`docs/ASK_GPT.md`](docs/ASK_GPT.md), and [`docs/EDITOR_MODES.md`](docs/EDITOR_MODES.md).
+
+## Current limitations
+
+- Quest storage is currently client-wide, not separated per world or server.
+- Vanilla statistic conditions use the player's existing cumulative statistics; they are not automatically rebased when a quest is created.
+- Item tags, advancement completion, `quest.done`, manual checkboxes, and a completed-history screen are not implemented yet.
+- Minecraft 26.2 World Clock/Timeline conditions are validation-only until QuestScript can name a specific clock and timeline.
+- CI verifies compilation, parser tests, and JAR creation. Vulkan and OpenGL graphical launches still require manual smoke testing on a game client.
 
 ## License
 
