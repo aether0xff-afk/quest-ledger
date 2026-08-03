@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "questledger",
+  "version": "${version}",
+  "name": "Quest Ledger",
+  "description": "A medieval personal quest ledger with visual and QuestScript editors.",
+  "authors": [
+    "aether0xff-afk"
+  ],
+  "contact": {
+    "sources": "https://github.com/aether0xff-afk/quest-ledger",
+    "issues": "https://github.com/aether0xff-afk/quest-ledger/issues"
+  },
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "dev.aether.questledger.QuestLedger"
+    ],
+    "client": [
+      "dev.aether.questledger.client.QuestLedgerClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "~26.2",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
