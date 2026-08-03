@@ -264,7 +264,7 @@ public final class QuestConditionEvaluator {
     }
 
     private long dayTime(Minecraft minecraft) {
-        return minecraft.level.getLevelData().getDayTime();
+        return minecraft.level.getLevelData().getTimeOfDay();
     }
 
     private boolean isDay(Minecraft minecraft) {
