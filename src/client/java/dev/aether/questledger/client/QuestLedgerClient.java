@@ -32,6 +32,7 @@ public final class QuestLedgerClient implements ClientModInitializer {
             while (this.openLedger.consumeClick()) {
                 client.gui.setScreen(new QuestLedgerScreen(null));
             }
+            QuestCompletionController.tick(client);
         });
 
         HudElementRegistry.attachElementBefore(
