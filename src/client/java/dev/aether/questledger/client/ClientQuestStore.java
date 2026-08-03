@@ -14,13 +14,16 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
 public final class ClientQuestStore {
-    private static final Path STORE_PATH = FabricLoader.getInstance().getConfigDir()
-            .resolve("quest-ledger")
-            .resolve("quests.qs");
+    private static final Path STORE_DIRECTORY = FabricLoader.getInstance().getConfigDir()
+            .resolve("quest-ledger");
+    private static final Path STORE_PATH = STORE_DIRECTORY.resolve("quests.qs");
+    private static final Path HISTORY_PATH = STORE_DIRECTORY.resolve("completed-history.log");
 
     private static QuestFile cached = new QuestFile(List.of());
     private static String source = "";
@@ -66,6 +69,23 @@ public final class ClientQuestStore {
         return parseAndCache(completeSource, true);
     }
 
+    public static synchronized SaveResult complete(QuestDefinition completedQuest) {
+        List<QuestDefinition> remaining = new ArrayList<>(cached.quests());
+        int index = remaining.indexOf(completedQuest);
+        if (index < 0) {
+            return new SaveResult(false, "Quest was no longer present in the active store.");
+        }
+
+        remaining.remove(index);
+        SaveResult save = persist(new QuestFile(remaining));
+        if (!save.success()) {
+            return save;
+        }
+
+        appendHistory(completedQuest);
+        return new SaveResult(true, "Completed quest: " + completedQuest.title());
+    }
+
     private static SaveResult parseAndCache(String completeSource, boolean persist) {
         try {
             QuestScript.ParsedQuestScript parsed = QuestScript.parseAndValidate(completeSource);
@@ -81,7 +101,7 @@ public final class ClientQuestStore {
     private static SaveResult persist(QuestFile file) {
         String canonical = new QuestScriptFormatter().format(file);
         try {
-            Files.createDirectories(STORE_PATH.getParent());
+            Files.createDirectories(STORE_DIRECTORY);
             Files.writeString(STORE_PATH, canonical, StandardCharsets.UTF_8);
             cached = file;
             source = canonical;
@@ -98,6 +118,34 @@ public final class ClientQuestStore {
         source = new QuestScriptFormatter().format(file);
         changedAtMillis = Util.getMillis();
         return new SaveResult(true, "Loaded " + file.quests().size() + " quest(s).");
+    }
+
+    private static void appendHistory(QuestDefinition quest) {
+        String id = quest.id().orElse("-");
+        String line = Instant.now() + "\t" + escapeHistory(id) + "\t"
+                + escapeHistory(quest.title()) + System.lineSeparator();
+        try {
+            Files.createDirectories(STORE_DIRECTORY);
+            Files.writeString(
+                    HISTORY_PATH,
+                    line,
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.APPEND
+            );
+        } catch (IOException exception) {
+            QuestLedger.LOGGER.warn(
+                    "Completed quest was removed, but history could not be written",
+                    exception
+            );
+        }
+    }
+
+    private static String escapeHistory(String value) {
+        return value.replace("\\", "\\\\")
+                .replace("\t", "\\t")
+                .replace("\r", "\\r")
+                .replace("\n", "\\n");
     }
 
     private static SaveResult invalidResult(Diagnostic diagnostic) {
