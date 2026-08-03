@@ -30,7 +30,7 @@ public final class QuestLedgerClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (this.openLedger.consumeClick()) {
-                client.gui.setScreen(new QuestLedgerScreen(client.gui.screen));
+                client.gui.setScreen(new QuestLedgerScreen(null));
             }
         });
 
