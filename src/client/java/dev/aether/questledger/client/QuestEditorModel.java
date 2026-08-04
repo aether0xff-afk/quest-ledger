@@ -16,16 +16,21 @@ public final class QuestEditorModel {
     public enum ConditionKind {
         INVENTORY("inventory.count"),
         BLOCK_MINED("stat.mined"),
-        MOB_KILLED("stat.killed");
+        MOB_KILLED("stat.killed"),
+        MANUAL("manual.checked");
 
-        private final String functionName;
+        private final String expressionName;
 
-        ConditionKind(String functionName) {
-            this.functionName = functionName;
+        ConditionKind(String expressionName) {
+            this.expressionName = expressionName;
         }
 
         public String functionName() {
-            return this.functionName;
+            return this.expressionName;
+        }
+
+        public boolean requiresTarget() {
+            return this != MANUAL;
         }
 
         public ConditionKind next() {
@@ -35,7 +40,7 @@ public final class QuestEditorModel {
 
         public static Optional<ConditionKind> fromFunction(String name) {
             for (ConditionKind value : values()) {
-                if (value.functionName.equals(name)) {
+                if (value != MANUAL && value.expressionName.equals(name)) {
                     return Optional.of(value);
                 }
             }
@@ -189,22 +194,37 @@ public final class QuestEditorModel {
 
     public QuestDefinition toQuestDefinition() {
         SourceLocation location = new SourceLocation(1, 1, 0);
-        Expression call = new Expression.Call(
-                List.of(this.conditionKind.functionName().split("\\.")),
-                List.of(new Expression.StringLiteral(this.targetId, location)),
-                location
-        );
-        Expression number = new Expression.NumberLiteral(
-                this.amount,
-                Integer.toString(this.amount),
-                location
-        );
-        Expression condition = new Expression.Comparison(
-                call,
-                this.operator.astOperator,
-                number,
-                location
-        );
+        Expression condition;
+
+        if (this.conditionKind == ConditionKind.MANUAL) {
+            Expression manual = new Expression.Reference(
+                    List.of("manual", "checked"),
+                    location
+            );
+            condition = new Expression.Comparison(
+                    manual,
+                    ComparisonOperator.EQUAL,
+                    new Expression.BooleanLiteral(true, location),
+                    location
+            );
+        } else {
+            Expression call = new Expression.Call(
+                    List.of(this.conditionKind.functionName().split("\\.")),
+                    List.of(new Expression.StringLiteral(this.targetId, location)),
+                    location
+            );
+            Expression number = new Expression.NumberLiteral(
+                    this.amount,
+                    Integer.toString(this.amount),
+                    location
+            );
+            condition = new Expression.Comparison(
+                    call,
+                    this.operator.astOperator,
+                    number,
+                    location
+            );
+        }
 
         return new QuestDefinition(
                 this.title,
@@ -212,7 +232,7 @@ public final class QuestEditorModel {
                 Optional.empty(),
                 condition,
                 Duration.ZERO,
-                Duration.ofMillis(1200),
+                Duration.ZERO,
                 Optional.of(this.animation.id),
                 this.hudVisible
         );
@@ -222,6 +242,17 @@ public final class QuestEditorModel {
         if (!(quest.completionCondition() instanceof Expression.Comparison comparison)) {
             return false;
         }
+
+        if (isManualComparison(comparison)) {
+            this.title = quest.title();
+            this.conditionKind = ConditionKind.MANUAL;
+            this.operator = Operator.EQUAL;
+            this.animation = quest.animation().map(Animation::fromId).orElse(Animation.WAX_SEAL);
+            this.hudVisible = quest.hudVisible();
+            this.codeSource = new QuestScriptFormatter().format(new QuestFile(List.of(quest)));
+            return true;
+        }
+
         if (!(comparison.left() instanceof Expression.Call call)
                 || call.arguments().size() != 1
                 || !(call.arguments().getFirst() instanceof Expression.StringLiteral target)
@@ -244,5 +275,13 @@ public final class QuestEditorModel {
         this.hudVisible = quest.hudVisible();
         this.codeSource = new QuestScriptFormatter().format(new QuestFile(List.of(quest)));
         return true;
+    }
+
+    private boolean isManualComparison(Expression.Comparison comparison) {
+        return comparison.operator() == ComparisonOperator.EQUAL
+                && comparison.left() instanceof Expression.Reference reference
+                && reference.qualifiedName().equals("manual.checked")
+                && comparison.right() instanceof Expression.BooleanLiteral value
+                && value.value();
     }
 }
