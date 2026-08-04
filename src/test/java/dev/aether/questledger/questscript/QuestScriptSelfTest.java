@@ -30,9 +30,36 @@ public final class QuestScriptSelfTest {
         require(parsed.file().quests().getFirst().completionCondition() instanceof Expression.Logical,
                 "Expected logical root expression");
 
-        String formatted = new QuestScriptFormatter().format(parsed.file());
-        QuestFile reparsed = QuestScript.parse(formatted);
-        require(reparsed.quests().size() == 1, "Formatted source must parse");
+        String persistenceFormatted = new QuestScriptFormatter().format(parsed.file());
+        QuestFile reparsed = QuestScript.parse(persistenceFormatted);
+        require(reparsed.quests().size() == 1, "Persistence source must parse");
+
+        String userFormatted = new QuestScriptUserFormatter().format(parsed.file());
+        require(!userFormatted.contains("hold "), "User source must hide legacy hold timers");
+        require(!userFormatted.contains("remove after"),
+                "User source must hide legacy removal timers");
+        require(QuestScript.parse(userFormatted).quests().size() == 1,
+                "Timer-free user source must parse");
+
+        QuestScript.ParsedQuestScript manual = QuestScript.parseAndValidate("""
+                quest "금 공장 완성" {
+                  complete when {
+                    manual.checked == true
+                  }
+                  animation "page_fold"
+                }
+                """);
+        require(manual.validation().valid(), "Expected valid manual quest");
+
+        QuestScript.ParsedQuestScript hybrid = QuestScript.parseAndValidate("""
+                quest "금 공장 검증" {
+                  complete when {
+                    manual.checked == true
+                    and inventory.count("minecraft:gold_ingot") >= 64
+                  }
+                }
+                """);
+        require(hybrid.validation().valid(), "Expected valid hybrid quest");
 
         QuestScript.ParsedQuestScript invalid = QuestScript.parseAndValidate("""
                 quest "잘못된 퀘스트" {

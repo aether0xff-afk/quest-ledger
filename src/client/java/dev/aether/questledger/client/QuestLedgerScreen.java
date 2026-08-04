@@ -2,7 +2,7 @@ package dev.aether.questledger.client;
 
 import dev.aether.questledger.questscript.QuestScript;
 import dev.aether.questledger.questscript.QuestScriptException;
-import dev.aether.questledger.questscript.QuestScriptFormatter;
+import dev.aether.questledger.questscript.QuestScriptUserFormatter;
 import dev.aether.questledger.questscript.ast.QuestDefinition;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
@@ -40,6 +40,9 @@ public final class QuestLedgerScreen extends Screen {
     private EditBox targetField;
     private EditBox amountField;
     private MultiLineEditBox codeEditor;
+    private Button operatorButton;
+    private Button minusButton;
+    private Button plusButton;
 
     public QuestLedgerScreen(Screen parent) {
         this(parent, new QuestEditorModel(), Mode.BUILDER, Component.empty(), false);
@@ -97,14 +100,33 @@ public final class QuestLedgerScreen extends Screen {
 
     private void addFooterButtons() {
         int y = this.panelTop + this.panelHeight - 32;
+        int available = this.panelWidth - 52;
+        int buttonWidth = Math.min(96, Math.max(70, (available - 16) / 3));
+
+        this.addRenderableWidget(Button.builder(
+                Component.translatable("screen.questledger.active"),
+                button -> show(new QuestListScreen(this))
+        ).bounds(this.panelLeft + 22, y, buttonWidth, 20).build());
+
         this.addRenderableWidget(Button.builder(
                 Component.translatable("screen.questledger.save"),
                 button -> saveQuest()
-        ).bounds(this.panelLeft + this.panelWidth - 218, y, 96, 20).build());
+        ).bounds(
+                this.panelLeft + this.panelWidth - 22 - buttonWidth * 2 - 8,
+                y,
+                buttonWidth,
+                20
+        ).build());
+
         this.addRenderableWidget(Button.builder(
                 Component.translatable("screen.questledger.cancel"),
                 button -> onClose()
-        ).bounds(this.panelLeft + this.panelWidth - 114, y, 92, 20).build());
+        ).bounds(
+                this.panelLeft + this.panelWidth - 22 - buttonWidth,
+                y,
+                buttonWidth,
+                20
+        ).build());
     }
 
     private void addBuilderWidgets() {
@@ -119,20 +141,21 @@ public final class QuestLedgerScreen extends Screen {
             syncBuilderFields();
             this.model.cycleConditionKind();
             button.setMessage(conditionLabel());
+            updateConditionWidgets();
         }).bounds(x, y, width, 20).build());
 
         y += 32;
         this.targetField = textField(x, y, width, "screen.questledger.field.target", this.model.targetId());
 
         y += 32;
-        this.addRenderableWidget(Button.builder(
+        this.operatorButton = this.addRenderableWidget(Button.builder(
                 Component.literal(this.model.operator().symbol()),
                 button -> {
                     this.model.cycleOperator();
                     button.setMessage(Component.literal(this.model.operator().symbol()));
                 }
         ).bounds(x, y, 54, 20).build());
-        this.addRenderableWidget(Button.builder(
+        this.minusButton = this.addRenderableWidget(Button.builder(
                 Component.literal("−"),
                 button -> adjustAmount(-1)
         ).bounds(x + 62, y, 28, 20).build());
@@ -143,7 +166,7 @@ public final class QuestLedgerScreen extends Screen {
                 "screen.questledger.field.amount",
                 Integer.toString(this.model.amount())
         );
-        this.addRenderableWidget(Button.builder(
+        this.plusButton = this.addRenderableWidget(Button.builder(
                 Component.literal("+"),
                 button -> adjustAmount(1)
         ).bounds(x + width - 28, y, 28, 20).build());
@@ -159,6 +182,27 @@ public final class QuestLedgerScreen extends Screen {
             this.model.toggleHudVisible();
             button.setMessage(hudLabel());
         }).bounds(x, y, width, 20).build());
+
+        updateConditionWidgets();
+    }
+
+    private void updateConditionWidgets() {
+        boolean enabled = this.model.conditionKind().requiresTarget();
+        if (this.targetField != null) {
+            this.targetField.active = enabled;
+        }
+        if (this.amountField != null) {
+            this.amountField.active = enabled;
+        }
+        if (this.operatorButton != null) {
+            this.operatorButton.active = enabled;
+        }
+        if (this.minusButton != null) {
+            this.minusButton.active = enabled;
+        }
+        if (this.plusButton != null) {
+            this.plusButton.active = enabled;
+        }
     }
 
     private EditBox textField(int x, int y, int width, String narrationKey, String value) {
@@ -251,7 +295,7 @@ public final class QuestLedgerScreen extends Screen {
             result = ClientQuestStore.append(this.model.codeSource());
             if (result.success()) {
                 try {
-                    this.model.codeSource(new QuestScriptFormatter().format(
+                    this.model.codeSource(new QuestScriptUserFormatter().format(
                             QuestScript.parse(this.model.codeSource())
                     ));
                 } catch (QuestScriptException ignored) {
@@ -277,10 +321,10 @@ public final class QuestLedgerScreen extends Screen {
         if (this.titleField != null) {
             this.model.title(this.titleField.getValue());
         }
-        if (this.targetField != null) {
+        if (this.targetField != null && this.model.conditionKind().requiresTarget()) {
             this.model.targetId(this.targetField.getValue());
         }
-        if (this.amountField != null) {
+        if (this.amountField != null && this.model.conditionKind().requiresTarget()) {
             try {
                 this.model.amount(Integer.parseInt(this.amountField.getValue().strip()));
             } catch (NumberFormatException ignored) {
@@ -405,7 +449,7 @@ public final class QuestLedgerScreen extends Screen {
                     this.font,
                     this.status,
                     this.panelLeft + 24,
-                    this.panelTop + this.panelHeight - 27,
+                    this.panelTop + this.panelHeight - 52,
                     this.statusError ? ERROR_INK : SUCCESS_INK,
                     false
             );
@@ -434,14 +478,21 @@ public final class QuestLedgerScreen extends Screen {
             );
         }
 
-        String preview = this.model.conditionKind().functionName()
-                + "(\"" + this.model.targetId() + "\") "
-                + this.model.operator().symbol() + " " + this.model.amount();
+        Component preview;
+        if (this.model.conditionKind() == QuestEditorModel.ConditionKind.MANUAL) {
+            preview = Component.translatable("screen.questledger.manual_hint");
+        } else {
+            preview = Component.literal(
+                    this.model.conditionKind().functionName()
+                            + "(\"" + this.model.targetId() + "\") "
+                            + this.model.operator().symbol() + " " + this.model.amount()
+            );
+        }
         graphics.text(
                 this.font,
                 preview,
                 this.panelLeft + 24,
-                this.panelTop + this.panelHeight - 54,
+                this.panelTop + this.panelHeight - 72,
                 MUTED_INK,
                 false
         );

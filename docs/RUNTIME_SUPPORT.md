@@ -1,21 +1,57 @@
 # QuestScript runtime support
 
-This document describes which QuestScript expressions Quest Ledger 0.2 can evaluate automatically in Minecraft 26.2.
+This document describes which QuestScript expressions Quest Ledger 0.3 can evaluate in Minecraft 26.2.
 
 ## Evaluation lifecycle
 
 Active quests are evaluated every five client ticks.
 
 1. The current singleplayer world or multiplayer server scope is resolved.
-2. The completion expression is evaluated against the current local player and client world.
-3. If it is false, any in-progress `hold` timer resets.
-4. If it remains true for the quest's `hold` duration, completion animation begins.
-5. The quest is removed after the greater of `remove after` and 450 ms.
-6. The completion timestamp, quest ID, and title are appended to the current scope's `completed-history.log`.
+2. The completion expression is evaluated against the current local player, world, statistic baselines, and manual confirmation state.
+3. If the expression is true, completion starts immediately.
+4. A fixed internal 700 ms completion effect plays.
+5. The quest is removed and the completion timestamp, quest ID, and title are appended to the current scope's `completed-history.log`.
+
+There is no configurable `hold` or removal timer. Legacy timer fields can still be parsed from older files, but runtime evaluation ignores them and user-facing QuestScript does not output them.
 
 A runtime value that is not implemented evaluates as unknown, never as true. Unknown conditions are logged once instead of silently completing or deleting a quest.
 
-Switching to another world or server immediately unloads the previous scope and clears in-progress hold/completion timers. Returning to that scope reloads its own quests and runtime state.
+Switching to another world or server immediately unloads the previous scope and clears any active completion effect. Returning to that scope reloads its own quests, statistic baselines, and manual confirmation state.
+
+## Completion modes
+
+### Automatic
+
+The completion expression contains only measurable values. Examples include combat statistics, mining, item possession, location, dimension, health, hunger, and supported logical combinations.
+
+### Manual
+
+A manual quest contains `manual.checked` and no other measurable requirement.
+
+```questscript
+quest "금 공장 완성" {
+  complete when {
+    manual.checked == true
+  }
+}
+```
+
+Press **Confirm Complete** on the Active Quests screen. The confirmation is persisted in `manual-state.properties`.
+
+### Hybrid
+
+A hybrid quest contains `manual.checked` and one or more automatic conditions.
+
+```questscript
+quest "금 공장 가동 확인" {
+  complete when {
+    manual.checked == true
+    and inventory.count("minecraft:gold_ingot") >= 64
+  }
+}
+```
+
+Manual confirmation satisfies only `manual.checked`; every remaining condition must also be true.
 
 ## Supported operators
 
@@ -44,6 +80,7 @@ Nested expressions and parentheses are supported through the QuestScript AST.
 | `player.on_ground` | Whether the player is on the ground |
 | `player.is_sneaking` | Whether sneak is held |
 | `player.is_sprinting` | Whether the player is sprinting |
+| `manual.checked` | Persistent confirmation for this quest in the current scope |
 
 ## Supported inventory functions
 
@@ -107,7 +144,6 @@ The following syntax validates but currently evaluates as unknown:
 - `quest.done(...)`
 - item tags
 - biome, weather, difficulty, and game-mode properties
-- `manual.checked`
 
 Minecraft 26.2 introduced named World Clocks and Timelines. Quest Ledger will add explicit clock and timeline arguments rather than pretending that one global day-time value still exists.
 
@@ -120,14 +156,19 @@ config/quest-ledger/worlds/<readable-name>-<scope-hash>/
   scope.properties
   quests.qs
   runtime-state.properties
+  manual-state.properties
   completed-history.log
 ```
 
 Singleplayer scopes are keyed by the normalized world save path. Multiplayer scopes are keyed by the normalized server address. The readable directory prefix is only for convenience; the hash prevents collisions between worlds or servers with the same display name.
 
-`scope.properties` records the exact scope key, display name, and kind. `runtime-state.properties` is internal state and should not normally be edited by hand.
+- `scope.properties` records the exact scope key, display name, and kind.
+- `runtime-state.properties` stores statistic baselines.
+- `manual-state.properties` stores manual confirmations that have not completed yet.
 
-## Migration from 0.1
+The internal state files should not normally be edited by hand.
+
+## Migration from earlier versions
 
 The former client-wide files:
 
@@ -145,3 +186,5 @@ config/quest-ledger/legacy/
 A `legacy-migration.properties` marker prevents the same quests from being copied into every later scope.
 
 Older versions did not record creation-time statistic baselines. Therefore, migrated statistic quests begin counting from the moment they are first loaded by the upgraded mod. Inventing an earlier baseline would risk accidental completion, so the migration deliberately chooses the safe behavior.
+
+Quest files containing old `hold` or `remove after` fields remain readable. Those values no longer affect completion, and opening or formatting the quest in the editor produces timer-free user-facing source.

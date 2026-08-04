@@ -66,7 +66,7 @@ public final class QuestConditionEvaluator {
             );
         }
         if (expression instanceof Expression.Reference reference) {
-            return referenceValue(reference.qualifiedName(), player);
+            return referenceValue(reference.qualifiedName(), quest, player);
         }
         if (expression instanceof Expression.Call call) {
             return callValue(call, quest, minecraft, player);
@@ -101,7 +101,11 @@ public final class QuestConditionEvaluator {
                 : leftBoolean.value() || rightBoolean.value());
     }
 
-    private Value referenceValue(String name, LocalPlayer player) {
+    private Value referenceValue(
+            String name,
+            QuestDefinition quest,
+            LocalPlayer player
+    ) {
         return switch (name) {
             case "player.health" -> new Value.NumberValue(player.getHealth());
             case "player.max_health" -> new Value.NumberValue(player.getMaxHealth());
@@ -116,7 +120,9 @@ public final class QuestConditionEvaluator {
             case "player.on_ground" -> new Value.BooleanValue(player.onGround());
             case "player.is_sneaking" -> new Value.BooleanValue(player.isShiftKeyDown());
             case "player.is_sprinting" -> new Value.BooleanValue(player.isSprinting());
-            case "manual.checked" -> new Value.BooleanValue(false);
+            case "manual.checked" -> new Value.BooleanValue(
+                    ManualQuestStore.isChecked(quest)
+            );
             case "world.time", "world.day", "world.is_day", "world.is_night" ->
                     new Value.UnknownValue(
                             "World clock conditions are pending Minecraft 26.2 timeline support."
