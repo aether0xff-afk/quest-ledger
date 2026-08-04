@@ -28,6 +28,7 @@ public final class QuestLedgerClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             QuestCompletionController.tick(client);
+            QuestStatisticSynchronizer.tick(client);
             FunctionalSmokeTestController.tick(client);
             VisualSmokeTestController.tick(client);
             while (this.openLedger.consumeClick()) {
