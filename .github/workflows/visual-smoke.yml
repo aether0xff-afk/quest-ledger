@@ -79,14 +79,19 @@ jobs:
             fi
 
             local source=''
-            for candidate in "$output" "run/$output"; do
+            for candidate in \
+              "$output" \
+              "run/$output" \
+              "screenshots/$output" \
+              "run/screenshots/$output"; do
               if [ -f "$candidate" ]; then
                 source="$candidate"
                 break
               fi
             done
             if [ -z "$source" ]; then
-              echo "Framebuffer capture $output was not created."
+              echo "Minecraft screenshot $output was not created."
+              find . -maxdepth 3 -type f -name '*.png' -print || true
               tail -n 200 visual-output/client.log || true
               exit 1
             fi
