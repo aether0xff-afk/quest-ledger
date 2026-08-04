@@ -158,7 +158,7 @@ public final class Parser {
             Token token = previous();
             return new Expression.StringLiteral(token.lexeme(), token.location());
         }
-        if (match(TokenType.IDENTIFIER)) {
+        if (match(TokenType.IDENTIFIER, TokenType.QUEST)) {
             Token first = previous();
             List<String> path = new ArrayList<>();
             path.add(first.lexeme());
