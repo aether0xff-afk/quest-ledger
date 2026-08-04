@@ -60,11 +60,19 @@ tasks.register('questScriptSelfTest', JavaExec) {
     mainClass = 'dev.aether.questledger.questscript.QuestScriptSelfTest'
 }
 
+tasks.register('transactionalStoreSelfTest', JavaExec) {
+    group = 'verification'
+    description = 'Runs the recoverable two-file store transaction self-test.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.aether.questledger.storage.TransactionalFilePairSelfTest'
+}
+
 tasks.named('test') {
     failOnNoDiscoveredTests = false
 }
 
-check.dependsOn tasks.named('questScriptSelfTest')
+check.dependsOn tasks.named('questScriptSelfTest'), tasks.named('transactionalStoreSelfTest')
 
 publishing {
     publications {
