@@ -1,0 +1,153 @@
+name: functional-smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-world-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+
+      - name: Install virtual display and software rendering
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb openbox mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libasound2t64
+
+      - name: Start Fabric server
+        run: |
+          set -euo pipefail
+          mkdir -p run-server functional-output
+          cat > run-server/eula.txt <<EOF_SERVER
+          eula=true
+          EOF_SERVER
+          cat > run-server/server.properties <<EOF_SERVER
+          online-mode=false
+          server-port=25565
+          server-ip=127.0.0.1
+          level-name=quest-ledger-functional-world
+          spawn-protection=0
+          view-distance=4
+          simulation-distance=4
+          max-players=2
+          motd=Quest Ledger functional smoke
+          EOF_SERVER
+
+          QUEST_LEDGER_FUNCTIONAL_SERVER=1 \
+            gradle runServer --no-daemon --stacktrace >functional-output/server.log 2>&1 &
+          echo $! > functional-output/server.pid
+
+          for _ in $(seq 1 360); do
+            if grep -q 'Done (' functional-output/server.log; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat functional-output/server.pid)" 2>/dev/null; then
+              echo 'Fabric server exited before becoming ready.'
+              tail -n 300 functional-output/server.log || true
+              exit 1
+            fi
+            sleep 1
+          done
+          echo 'Timed out waiting for the Fabric server.'
+          tail -n 300 functional-output/server.log || true
+          exit 1
+
+      - name: Run two-pass real client flow
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          MESA_LOADER_DRIVER_OVERRIDE: llvmpipe
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+        run: |
+          set -euo pipefail
+          mkdir -p run functional-output
+          cat > run/options.txt <<EOF_OPTIONS
+          lang:ko_kr
+          fullscreen:false
+          guiScale:3
+          pauseOnLostFocus:false
+          EOF_OPTIONS
+
+          Xvfb :99 -screen 0 854x480x24 -ac +extension GLX +render -noreset \
+            >functional-output/xvfb.log 2>&1 &
+          export DISPLAY=:99
+          sleep 2
+          openbox >functional-output/openbox.log 2>&1 &
+
+          run_phase() {
+            local phase="$1"
+            local marker="functional-smoke-phase-${phase}-success"
+            rm -f "run/$marker" run/functional-smoke-failure.txt
+
+            QUEST_LEDGER_FUNCTIONAL_SMOKE_PHASE="$phase" \
+              gradle runClient --no-daemon --stacktrace \
+                --args="--quickPlayMultiplayer 127.0.0.1:25565 --width 854 --height 480" \
+                >"functional-output/client-phase-${phase}.log" 2>&1 &
+            local client_pid=$!
+
+            for _ in $(seq 1 420); do
+              if [ -f "run/$marker" ]; then
+                wait "$client_pid"
+                return 0
+              fi
+              if [ -f run/functional-smoke-failure.txt ]; then
+                cat run/functional-smoke-failure.txt
+                tail -n 300 "functional-output/client-phase-${phase}.log" || true
+                kill "$client_pid" 2>/dev/null || true
+                exit 1
+              fi
+              if ! kill -0 "$client_pid" 2>/dev/null; then
+                echo "Minecraft client phase $phase exited before success."
+                tail -n 300 "functional-output/client-phase-${phase}.log" || true
+                exit 1
+              fi
+              sleep 1
+            done
+
+            echo "Timed out waiting for functional phase $phase."
+            tail -n 300 "functional-output/client-phase-${phase}.log" || true
+            kill "$client_pid" 2>/dev/null || true
+            exit 1
+          }
+
+          run_phase 1
+          run_phase 2
+
+          test -f run/functional-smoke-phase-1-success
+          test -f run/functional-smoke-phase-2-success
+          test -f run/functional-smoke-phase-2-cleared
+
+          mkdir -p functional-output/result
+          cp run/functional-smoke-phase-* functional-output/result/
+          if [ -d run/config/quest-ledger ]; then
+            cp -R run/config/quest-ledger functional-output/result/
+          fi
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f functional-output/server.pid ]; then
+            kill "$(cat functional-output/server.pid)" 2>/dev/null || true
+          fi
+
+      - name: Upload functional logs and state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quest-ledger-functional-smoke
+          path: functional-output/

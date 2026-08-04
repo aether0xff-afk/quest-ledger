@@ -22,12 +22,14 @@ public final class QuestLedgerClient implements ClientModInitializer {
         this.openLedger = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.questledger.open",
                 InputConstants.Type.KEYSYM,
-                InputConstants.KEY_Q,
+                InputConstants.KEY_K,
                 CATEGORY
         ));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             QuestCompletionController.tick(client);
+            QuestStatisticSynchronizer.tick(client);
+            FunctionalSmokeTestController.tick(client);
             VisualSmokeTestController.tick(client);
             while (this.openLedger.consumeClick()) {
                 if (ClientQuestStore.activeScope().isPresent()) {
