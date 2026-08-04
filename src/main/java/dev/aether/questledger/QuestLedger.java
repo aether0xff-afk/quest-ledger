@@ -10,6 +10,7 @@ public final class QuestLedger implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        FunctionalSmokeTestServerController.register();
         LOGGER.info("Quest Ledger initialized.");
     }
 }
