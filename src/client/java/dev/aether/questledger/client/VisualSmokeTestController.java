@@ -45,9 +45,7 @@ public final class VisualSmokeTestController {
 
     private static void capture(Minecraft client, String fileName, String markerName) {
         try {
-            Field targetField = Minecraft.class.getDeclaredField("mainRenderTarget");
-            targetField.setAccessible(true);
-            RenderTarget target = (RenderTarget) targetField.get(client);
+            RenderTarget target = findMainRenderTarget(client);
             Screenshot.grab(
                     client.gameDirectory,
                     fileName,
@@ -65,6 +63,26 @@ public final class VisualSmokeTestController {
             QuestLedger.LOGGER.error("Could not access Minecraft main render target", exception);
             marker(markerName);
         }
+    }
+
+    private static RenderTarget findMainRenderTarget(Minecraft client)
+            throws ReflectiveOperationException {
+        for (Field field : Minecraft.class.getDeclaredFields()) {
+            if (!RenderTarget.class.isAssignableFrom(field.getType())) {
+                continue;
+            }
+            field.setAccessible(true);
+            Object value = field.get(client);
+            QuestLedger.LOGGER.info(
+                    "Visual smoke-test found RenderTarget field '{}' ({})",
+                    field.getName(),
+                    field.getType().getName()
+            );
+            if (value instanceof RenderTarget target) {
+                return target;
+            }
+        }
+        throw new NoSuchFieldException("Minecraft has no non-null RenderTarget field");
     }
 
     private static void marker(String fileName) {
