@@ -235,8 +235,7 @@ public final class QuestLedgerScreen extends Screen {
                 20,
                 Component.translatable(narrationKey)
         );
-        field.setBordered(false);
-        field.setTextColor(QuestLedgerTheme.INK);
+        field.setTextColor(0xFFF8E9C5);
         field.setValue(value);
         return this.addRenderableWidget(field);
     }
@@ -418,16 +417,6 @@ public final class QuestLedgerScreen extends Screen {
                     this.frame.right() - this.layout.padding(),
                     this.layout.contentBottom() - 4
             );
-        } else {
-            if (this.titleField != null) {
-                QuestLedgerTheme.drawTextField(graphics, this.titleField);
-            }
-            if (this.targetField != null) {
-                QuestLedgerTheme.drawTextField(graphics, this.targetField);
-            }
-            if (this.amountField != null) {
-                QuestLedgerTheme.drawTextField(graphics, this.amountField);
-            }
         }
     }
 
