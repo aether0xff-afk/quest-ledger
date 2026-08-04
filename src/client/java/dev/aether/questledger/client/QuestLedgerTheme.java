@@ -4,7 +4,6 @@ import dev.aether.questledger.ui.QuestLedgerUiLayout;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 
 /** Shared visual language for the v0.4 ledger screens and HUD. */
@@ -104,24 +103,6 @@ final class QuestLedgerTheme {
         graphics.fill(left, top, right, bottom, LEATHER_LIGHT);
         graphics.fill(left + 2, top + 2, right - 2, bottom - 2, 0xFFF8EAC8);
         graphics.fill(left + 4, top + 4, right - 4, bottom - 4, 0xFFF1DDB1);
-    }
-
-    static void drawTextField(GuiGraphicsExtractor graphics, EditBox field) {
-        int x = field.getX();
-        int y = field.getY();
-        int width = field.getWidth();
-        int height = field.getHeight();
-        boolean focused = field.isFocused() && field.active;
-        int border = focused ? GOLD : (field.active ? GOLD_DARK : 0xFF9B835D);
-        int inner = field.active ? 0xFFF9EAC8 : PAPER_ALT;
-
-        graphics.fill(x + 2, y + 3, x + width + 2, y + height + 3, 0x30000000);
-        graphics.fill(x, y, x + width, y + height, border);
-        graphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, inner);
-        graphics.fill(x + 3, y + 3, x + width - 3, y + 4, 0x66FFFFFF);
-        if (focused) {
-            graphics.fill(x + 2, y + height - 3, x + width - 2, y + height - 2, GOLD);
-        }
     }
 
     static void drawButton(
