@@ -25,7 +25,16 @@ public final class QuestCompletionController {
     }
 
     public static void tick(Minecraft minecraft) {
-        if (minecraft.player == null || minecraft.level == null) {
+        boolean scopeChanged = ClientQuestStore.synchronizeScope(minecraft);
+        if (scopeChanged) {
+            STATES.clear();
+            REPORTED_UNKNOWN.clear();
+            ticks = 0;
+        }
+
+        if (minecraft.player == null
+                || minecraft.level == null
+                || ClientQuestStore.activeScope().isEmpty()) {
             STATES.clear();
             return;
         }
@@ -47,10 +56,7 @@ public final class QuestCompletionController {
                 continue;
             }
 
-            QuestConditionEvaluator.Result result = EVALUATOR.evaluate(
-                    quest.completionCondition(),
-                    minecraft
-            );
+            QuestConditionEvaluator.Result result = EVALUATOR.evaluate(quest, minecraft);
             if (!result.known()) {
                 state.satisfiedSince = 0L;
                 reportUnknownOnce(quest, result.reason());
