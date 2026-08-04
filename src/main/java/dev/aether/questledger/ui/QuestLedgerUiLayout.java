@@ -15,8 +15,10 @@ public final class QuestLedgerUiLayout {
 
     public static Frame frame(int screenWidth, int screenHeight) {
         int margin = screenWidth < 560 || screenHeight < 360 ? 10 : 18;
-        int width = clamp(screenWidth - margin * 2, 300, 720);
-        int height = clamp(screenHeight - margin * 2, 236, 440);
+        int availableWidth = Math.max(1, screenWidth - margin * 2);
+        int availableHeight = Math.max(1, screenHeight - margin * 2);
+        int width = Math.min(720, availableWidth);
+        int height = Math.min(440, availableHeight);
         int left = (screenWidth - width) / 2;
         int top = (screenHeight - height) / 2;
         boolean compact = width < 540 || height < 340;
@@ -30,12 +32,12 @@ public final class QuestLedgerUiLayout {
         int footerHeight = frame.tiny() ? 38 : 44;
         int contentTop = frame.top() + headerHeight;
         int contentBottom = frame.bottom() - footerHeight;
-        int labelWidth = clamp(frame.width() / 4, 82, 132);
+        int labelWidth = clamp(frame.width() / 4, 76, 132);
         int gap = frame.compact() ? 8 : 12;
         int fieldLeft = frame.left() + padding + labelWidth + gap;
         int fieldWidth = frame.right() - padding - fieldLeft;
-        int availableHeight = contentBottom - contentTop;
-        int rowStep = clamp(availableHeight / 6, 28, 36);
+        int availableHeight = Math.max(120, contentBottom - contentTop);
+        int rowStep = clamp(availableHeight / 6, 22, 36);
         return new Editor(
                 padding,
                 headerHeight,
@@ -44,7 +46,7 @@ public final class QuestLedgerUiLayout {
                 contentBottom,
                 labelWidth,
                 fieldLeft,
-                Math.max(120, fieldWidth),
+                Math.max(96, fieldWidth),
                 rowStep
         );
     }
@@ -55,10 +57,10 @@ public final class QuestLedgerUiLayout {
         int footerHeight = frame.tiny() ? 38 : 44;
         int contentTop = frame.top() + headerHeight;
         int contentBottom = frame.bottom() - footerHeight;
-        int available = Math.max(96, contentBottom - contentTop);
+        int available = Math.max(80, contentBottom - contentTop);
         int perPage = clamp(available / 50, 2, 6);
         int gap = frame.tiny() ? 4 : 6;
-        int cardHeight = Math.max(42, (available - Math.max(0, perPage - 1) * gap) / perPage);
+        int cardHeight = Math.max(36, (available - Math.max(0, perPage - 1) * gap) / perPage);
         return new ListLayout(padding, headerHeight, footerHeight, contentTop, contentBottom,
                 perPage, cardHeight, gap);
     }
