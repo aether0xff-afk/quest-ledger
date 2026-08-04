@@ -1,7 +1,7 @@
 package dev.aether.questledger.client;
 
 import dev.aether.questledger.QuestLedger;
-import dev.aether.questledger.questscript.QuestScriptFormatter;
+import dev.aether.questledger.questscript.QuestScriptUserFormatter;
 import dev.aether.questledger.questscript.ast.QuestDefinition;
 import dev.aether.questledger.questscript.ast.QuestFile;
 import net.fabricmc.loader.api.FabricLoader;
@@ -175,7 +175,9 @@ public final class ManualQuestStore {
     }
 
     private static String fingerprint(QuestDefinition quest) {
-        String canonical = new QuestScriptFormatter().format(new QuestFile(java.util.List.of(quest)));
+        String canonical = new QuestScriptUserFormatter().format(
+                new QuestFile(java.util.List.of(quest))
+        );
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(canonical.getBytes(StandardCharsets.UTF_8));
