@@ -70,14 +70,21 @@ public final class QuestLedgerUiLayoutSelfTest {
 
     private static void sizesButtonsWithinLimits() {
         int shortButton = QuestLedgerUiLayout.buttonWidth(WIDTH, "뒤로", 68, 120);
-        int longButton = QuestLedgerUiLayout.buttonWidth(
+        int naturalButton = QuestLedgerUiLayout.buttonWidth(
                 WIDTH,
                 "완료 확인을 진행합니다",
                 68,
                 120
         );
+        int cappedButton = QuestLedgerUiLayout.buttonWidth(
+                WIDTH,
+                "완료 확인을 진행하고 퀘스트를 영구적으로 저장합니다",
+                68,
+                120
+        );
         require(shortButton >= 68 && shortButton <= 120, "Short button escaped limits");
-        require(longButton == 120, "Long button was not capped");
+        require(naturalButton >= 68 && naturalButton <= 120, "Natural button escaped limits");
+        require(cappedButton == 120, "Overlong button was not capped");
     }
 
     private static String label(int[] size) {
