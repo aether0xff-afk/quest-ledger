@@ -6,6 +6,9 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public final class QuestTypesScreen extends Screen {
     private static final int AUTO = 0;
     private static final int MANUAL = 1;
@@ -13,6 +16,7 @@ public final class QuestTypesScreen extends Screen {
 
     private final Screen parent;
     private final int section;
+    private final List<Button> styledButtons = new ArrayList<>();
     private QuestLedgerUiLayout.Frame frame;
     private int contentTop;
     private int contentBottom;
@@ -30,6 +34,7 @@ public final class QuestTypesScreen extends Screen {
 
     @Override
     protected void init() {
+        this.styledButtons.clear();
         this.frame = QuestLedgerUiLayout.frame(this.width, this.height);
         this.padding = this.frame.compact() ? 12 : 18;
         this.contentTop = this.frame.top() + (this.frame.tiny() ? 56 : 64);
@@ -43,7 +48,7 @@ public final class QuestTypesScreen extends Screen {
                 70,
                 104
         );
-        this.addRenderableWidget(Button.builder(
+        addButton(Button.builder(
                 Component.translatable("screen.questledger.back"),
                 button -> onClose()
         ).bounds(
@@ -73,8 +78,13 @@ public final class QuestTypesScreen extends Screen {
                     ignored -> show(new QuestTypesScreen(this.parent, target))
             ).bounds(x + index * (width + gap), y, width, 20).build();
             button.active = index != this.section;
-            this.addRenderableWidget(button);
+            addButton(button);
         }
+    }
+
+    private Button addButton(Button button) {
+        this.styledButtons.add(button);
+        return this.addRenderableWidget(button);
     }
 
     @Override
@@ -113,6 +123,9 @@ public final class QuestTypesScreen extends Screen {
         );
 
         drawSection(graphics);
+        for (Button button : this.styledButtons) {
+            QuestLedgerTheme.drawButton(graphics, this.font, button, mouseX, mouseY);
+        }
     }
 
     private void drawSection(GuiGraphicsExtractor graphics) {
@@ -160,7 +173,7 @@ public final class QuestTypesScreen extends Screen {
 
         int gridTop = this.contentTop + 21;
         int availableHeight = Math.max(30, this.contentBottom - gridTop - 5);
-        int columns = this.frame.width() >= 520 ? 2 : 1;
+        int columns = this.frame.width() >= 360 ? 2 : 1;
         int rows = (count + columns - 1) / columns;
         int gap = this.frame.tiny() ? 4 : 6;
         int cardWidth = Math.max(40, (right - left - gap * (columns - 1)) / columns);
