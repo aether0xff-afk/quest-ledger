@@ -13,7 +13,7 @@ import java.util.Optional;
 
 public final class QuestCompletionController {
     private static final int EVALUATION_INTERVAL_TICKS = 5;
-    private static final long MINIMUM_ANIMATION_MILLIS = 450L;
+    private static final long COMPLETION_ANIMATION_MILLIS = 700L;
 
     private static final QuestConditionEvaluator EVALUATOR = new QuestConditionEvaluator();
     private static final Map<QuestDefinition, State> STATES = new HashMap<>();
@@ -25,8 +25,9 @@ public final class QuestCompletionController {
     }
 
     public static void tick(Minecraft minecraft) {
-        boolean scopeChanged = ClientQuestStore.synchronizeScope(minecraft);
-        if (scopeChanged) {
+        boolean questScopeChanged = ClientQuestStore.synchronizeScope(minecraft);
+        boolean manualScopeChanged = ManualQuestStore.synchronizeScope(minecraft);
+        if (questScopeChanged || manualScopeChanged) {
             STATES.clear();
             REPORTED_UNKNOWN.clear();
             ticks = 0;
@@ -58,27 +59,12 @@ public final class QuestCompletionController {
 
             QuestConditionEvaluator.Result result = EVALUATOR.evaluate(quest, minecraft);
             if (!result.known()) {
-                state.satisfiedSince = 0L;
                 reportUnknownOnce(quest, result.reason());
                 continue;
             }
 
-            if (!result.satisfied()) {
-                state.satisfiedSince = 0L;
-                continue;
-            }
-
-            if (state.satisfiedSince == 0L) {
-                state.satisfiedSince = now;
-            }
-
-            long requiredHold = Math.max(0L, quest.holdDuration().toMillis());
-            if (now - state.satisfiedSince >= requiredHold) {
+            if (result.satisfied()) {
                 state.completionStartedAt = now;
-                state.animationDuration = Math.max(
-                        MINIMUM_ANIMATION_MILLIS,
-                        quest.removeAfter().toMillis()
-                );
             }
         }
     }
@@ -91,7 +77,7 @@ public final class QuestCompletionController {
             if (state.completionStartedAt <= 0L) {
                 continue;
             }
-            if (now - state.completionStartedAt < state.animationDuration) {
+            if (now - state.completionStartedAt < COMPLETION_ANIMATION_MILLIS) {
                 continue;
             }
 
@@ -102,6 +88,8 @@ public final class QuestCompletionController {
                         entry.getKey().title(),
                         result.message()
                 );
+            } else {
+                ManualQuestStore.clear(entry.getKey());
             }
             iterator.remove();
         }
@@ -131,7 +119,7 @@ public final class QuestCompletionController {
                             Math.max(
                                     0.0F,
                                     (now - state.completionStartedAt)
-                                            / (float) state.animationDuration
+                                            / (float) COMPLETION_ANIMATION_MILLIS
                             )
                     );
                     return new CompletionView(entry.getKey(), progress);
@@ -144,9 +132,7 @@ public final class QuestCompletionController {
     }
 
     private static final class State {
-        private long satisfiedSince;
         private long completionStartedAt;
-        private long animationDuration;
     }
 
     public record CompletionView(QuestDefinition quest, float progress) {
