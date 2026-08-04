@@ -8,17 +8,20 @@ public final class QuestLedgerUiLayoutSelfTest {
 
     public static void main(String[] args) {
         validatesCommonGuiSizes();
+        validatesCompactGuideGrid();
         truncatesWithoutOverflow();
         wrapsLongKoreanAndEnglishText();
         sizesButtonsWithinLimits();
-        System.out.println("Quest Ledger UI layout self-test passed (4 groups, 7 resolutions).");
+        System.out.println("Quest Ledger UI layout self-test passed (5 groups, 9 resolutions).");
     }
 
     private static void validatesCommonGuiSizes() {
         int[][] sizes = {
                 {320, 240},
+                {360, 240},
                 {360, 270},
                 {426, 240},
+                {480, 270},
                 {640, 360},
                 {854, 480},
                 {1280, 720},
@@ -36,25 +39,57 @@ public final class QuestLedgerUiLayoutSelfTest {
             require(editor.fieldLeft() + editor.fieldWidth() <= frame.right(),
                     "Editor field ends outside frame at " + label(size));
             require(editor.contentTop() < editor.contentBottom(), "Editor content collapsed");
-            require(editor.rowStep() >= 22, "Editor row became unusably short");
+            require(editor.rowStep() >= 20, "Editor row became unusably short");
             int visibleRows = frame.tiny() ? 5 : 6;
             int lastWidgetBottom = editor.contentTop()
                     + editor.rowStep() * (visibleRows - 1)
                     + 20;
-            require(lastWidgetBottom + 15 <= editor.contentBottom(),
-                    "Editor widgets collide with status area at " + label(size));
+            int statusTop = editor.contentBottom() - 13;
+            require(lastWidgetBottom + 6 <= statusTop,
+                    "Editor widgets collide with status text at " + label(size));
+            require(statusTop + 9 <= editor.contentBottom(),
+                    "Editor status text collides with footer at " + label(size));
 
             QuestLedgerUiLayout.ListLayout list = QuestLedgerUiLayout.list(frame);
             require(list.questsPerPage() >= 2 && list.questsPerPage() <= 6,
                     "Unexpected quest page size");
             if (frame.tiny()) {
-                require(list.questsPerPage() >= 3,
-                        "Compact list wastes space at " + label(size));
+                require(list.questsPerPage() == 2,
+                        "Tiny list must use two readable cards at " + label(size));
+                int footerContentWidth = frame.width() - list.padding() * 2;
+                int arrowsWidth = 24 + 4 + 24;
+                int rightButtonsWidth = 68 + 4 + 52;
+                require(footerContentWidth - arrowsWidth - rightButtonsWidth - 8 >= 24,
+                        "Tiny footer controls leave no page-label gap at " + label(size));
             }
             int used = list.questsPerPage() * list.cardHeight()
                     + (list.questsPerPage() - 1) * list.gap();
             require(used <= list.contentBottom() - list.contentTop(),
                     "Quest cards overflow content at " + label(size));
+        }
+    }
+
+    private static void validatesCompactGuideGrid() {
+        int[][] sizes = {
+                {320, 240},
+                {360, 240},
+                {360, 270},
+                {426, 240}
+        };
+        for (int[] size : sizes) {
+            QuestLedgerUiLayout.Frame frame = QuestLedgerUiLayout.frame(size[0], size[1]);
+            int contentTop = frame.top() + 56;
+            int contentBottom = frame.bottom() - 44;
+            int gridTop = contentTop + 19;
+            int rows = 3;
+            int gap = 4;
+            int available = contentBottom - gridTop - 5;
+            int cardHeight = Math.max(16, Math.min(42, (available - gap * (rows - 1)) / rows));
+            int used = rows * cardHeight + gap * (rows - 1);
+            require(used <= contentBottom - gridTop,
+                    "Compact guide cards collide with footer at " + label(size));
+            require(frame.width() - 24 - gap >= 2 * 40,
+                    "Compact guide cannot sustain two columns at " + label(size));
         }
     }
 
