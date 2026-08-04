@@ -24,7 +24,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            xvfb openbox imagemagick \
+            xvfb openbox xdotool imagemagick \
             mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libasound2t64
       - name: Launch Minecraft 26.2 and capture Quest Ledger
         env:
@@ -51,47 +51,50 @@ jobs:
             >visual-output/client.log 2>&1 &
           GAME_PID=$!
 
-          collect_capture() {
+          wait_for_marker() {
             local marker="$1"
-            local output="$2"
-            local marker_path=''
             for _ in $(seq 1 240); do
-              if [ -f "$marker" ]; then
-                marker_path="$marker"
-                break
-              fi
-              if [ -f "run/$marker" ]; then
-                marker_path="run/$marker"
-                break
-              fi
+              [ -f "$marker" ] && return 0
+              [ -f "run/$marker" ] && return 0
               if ! kill -0 "$GAME_PID" 2>/dev/null; then
-                echo 'Minecraft exited before the screenshot marker appeared.'
+                echo 'Minecraft exited before the UI marker appeared.'
                 tail -n 200 visual-output/client.log || true
                 exit 1
               fi
               sleep 1
             done
+            echo "Timed out waiting for $marker"
+            tail -n 200 visual-output/client.log || true
+            exit 1
+          }
 
-            if [ -z "$marker_path" ]; then
-              echo "Timed out waiting for $marker"
-              tail -n 200 visual-output/client.log || true
-              exit 1
-            fi
+          capture_with_f2() {
+            local marker="$1"
+            local output="$2"
+            wait_for_marker "$marker"
+
+            mkdir -p run/screenshots
+            local before
+            before=$(find run/screenshots -maxdepth 1 -type f -name '*.png' | wc -l)
+            echo "Active window before F2:"
+            xdotool getactivewindow getwindowname || true
+            xdotool key --clearmodifiers F2
 
             local source=''
-            for candidate in \
-              "$output" \
-              "run/$output" \
-              "screenshots/$output" \
-              "run/screenshots/$output"; do
-              if [ -f "$candidate" ]; then
-                source="$candidate"
+            for _ in $(seq 1 60); do
+              local after
+              after=$(find run/screenshots -maxdepth 1 -type f -name '*.png' | wc -l)
+              if [ "$after" -gt "$before" ]; then
+                source=$(find run/screenshots -maxdepth 1 -type f -name '*.png' \
+                  -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)
                 break
               fi
+              sleep 1
             done
+
             if [ -z "$source" ]; then
-              echo "Minecraft screenshot $output was not created."
-              find . -maxdepth 3 -type f -name '*.png' -print || true
+              echo "F2 did not create a screenshot for $marker."
+              xdotool search --onlyvisible --name '.*' getwindowname %@ || true
               tail -n 200 visual-output/client.log || true
               exit 1
             fi
@@ -104,8 +107,8 @@ jobs:
             awk -v mean="$mean" 'BEGIN { if (mean < 0.01) exit 1 }'
           }
 
-          collect_capture quest-ledger-builder-ready quest-ledger-builder.png
-          collect_capture quest-ledger-types-ready quest-ledger-types.png
+          capture_with_f2 quest-ledger-builder-ready quest-ledger-builder.png
+          capture_with_f2 quest-ledger-types-ready quest-ledger-types.png
 
           wait "$GAME_PID" || {
             tail -n 200 visual-output/client.log || true
