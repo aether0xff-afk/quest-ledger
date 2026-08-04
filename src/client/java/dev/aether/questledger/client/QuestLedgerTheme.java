@@ -3,6 +3,7 @@ package dev.aether.questledger.client;
 import dev.aether.questledger.ui.QuestLedgerUiLayout;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 
 /** Shared visual language for the v0.4 ledger screens and HUD. */
@@ -46,7 +47,6 @@ final class QuestLedgerTheme {
         graphics.fill(left + 8, top + 8, right - 8, bottom - 8, PAPER_ALT);
         graphics.fill(left + 10, top + 10, right - 10, bottom - 10, PAPER);
 
-        // Leather corner guards and small brass pins.
         drawCorner(graphics, left + 5, top + 5, 1, 1);
         drawCorner(graphics, right - 5, top + 5, -1, 1);
         drawCorner(graphics, left + 5, bottom - 5, 1, -1);
@@ -103,6 +103,49 @@ final class QuestLedgerTheme {
         graphics.fill(left, top, right, bottom, LEATHER_LIGHT);
         graphics.fill(left + 2, top + 2, right - 2, bottom - 2, 0xFFF8EAC8);
         graphics.fill(left + 4, top + 4, right - 4, bottom - 4, 0xFFF1DDB1);
+    }
+
+    static void drawButton(
+            GuiGraphicsExtractor graphics,
+            Font font,
+            Button button,
+            int mouseX,
+            int mouseY
+    ) {
+        int x = button.getX();
+        int y = button.getY();
+        int width = button.getWidth();
+        int height = button.getHeight();
+        boolean hovered = button.active
+                && mouseX >= x && mouseX < x + width
+                && mouseY >= y && mouseY < y + height;
+
+        int border = button.active ? GOLD_DARK : 0xFF9B835D;
+        int inner = button.active
+                ? (hovered ? GOLD_DARK : LEATHER_LIGHT)
+                : PAPER_ALT;
+        int textColor = button.active
+                ? (hovered ? 0xFFFFFFFF : 0xFFF8E9C5)
+                : MUTED;
+
+        graphics.fill(x + 2, y + 3, x + width + 2, y + height + 3, 0x42000000);
+        graphics.fill(x, y, x + width, y + height, border);
+        graphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, inner);
+        if (button.active) {
+            graphics.fill(x + 3, y + 3, x + width - 3, y + 4,
+                    hovered ? GOLD : 0x557B5433);
+            graphics.fill(x + 3, y + height - 4, x + width - 3, y + height - 3,
+                    0x8822140D);
+        }
+
+        String label = QuestLedgerUiLayout.ellipsize(
+                font::width,
+                button.getMessage().getString(),
+                Math.max(1, width - 10)
+        );
+        int textX = x + Math.max(5, (width - font.width(label)) / 2);
+        int textY = y + Math.max(1, (height - 8) / 2);
+        graphics.text(font, Component.literal(label), textX, textY, textColor, false);
     }
 
     static void drawBadge(
