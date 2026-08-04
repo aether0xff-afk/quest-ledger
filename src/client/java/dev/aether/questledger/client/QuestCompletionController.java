@@ -81,15 +81,22 @@ public final class QuestCompletionController {
                 continue;
             }
 
-            ClientQuestStore.SaveResult result = ClientQuestStore.complete(entry.getKey());
+            QuestDefinition quest = entry.getKey();
+            boolean manuallyChecked = ManualQuestStore.isChecked(quest);
+            if (manuallyChecked) {
+                ManualQuestStore.clear(quest);
+            }
+
+            ClientQuestStore.SaveResult result = ClientQuestStore.complete(quest);
             if (!result.success()) {
+                if (manuallyChecked) {
+                    ManualQuestStore.markChecked(quest);
+                }
                 QuestLedger.LOGGER.error(
                         "Could not remove completed quest '{}': {}",
-                        entry.getKey().title(),
+                        quest.title(),
                         result.message()
                 );
-            } else {
-                ManualQuestStore.clear(entry.getKey());
             }
             iterator.remove();
         }
