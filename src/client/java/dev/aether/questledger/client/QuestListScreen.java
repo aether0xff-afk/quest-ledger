@@ -7,12 +7,14 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public final class QuestListScreen extends Screen {
     private final Screen parent;
     private final int requestedPage;
     private final List<QuestDefinition> previewQuests;
+    private final List<Button> styledButtons = new ArrayList<>();
 
     private QuestLedgerUiLayout.Frame frame;
     private QuestLedgerUiLayout.ListLayout layout;
@@ -37,6 +39,7 @@ public final class QuestListScreen extends Screen {
 
     @Override
     protected void init() {
+        this.styledButtons.clear();
         this.frame = QuestLedgerUiLayout.frame(this.width, this.height);
         this.layout = QuestLedgerUiLayout.list(this.frame);
         this.actionWidth = QuestLedgerUiLayout.buttonWidth(
@@ -67,13 +70,13 @@ public final class QuestListScreen extends Screen {
         int x = this.frame.left() + this.layout.padding();
         int gap = 5;
 
-        Button previous = this.addRenderableWidget(Button.builder(
+        Button previous = addButton(Button.builder(
                 Component.literal("‹"),
                 button -> show(new QuestListScreen(this.parent, this.page - 1, this.previewQuests))
         ).bounds(x, y, 28, 20).build());
         previous.active = this.page > 0;
 
-        Button next = this.addRenderableWidget(Button.builder(
+        Button next = addButton(Button.builder(
                 Component.literal("›"),
                 button -> show(new QuestListScreen(this.parent, this.page + 1, this.previewQuests))
         ).bounds(x + 28 + gap, y, 28, 20).build());
@@ -93,12 +96,12 @@ public final class QuestListScreen extends Screen {
         );
         int right = this.frame.right() - this.layout.padding();
 
-        this.addRenderableWidget(Button.builder(
+        addButton(Button.builder(
                 Component.translatable("screen.questledger.types.button"),
                 button -> show(new QuestTypesScreen(this))
         ).bounds(right - backWidth - gap - typesWidth, y, typesWidth, 20).build());
 
-        this.addRenderableWidget(Button.builder(
+        addButton(Button.builder(
                 Component.translatable("screen.questledger.back"),
                 button -> onClose()
         ).bounds(right - backWidth, y, backWidth, 20).build());
@@ -132,7 +135,12 @@ public final class QuestListScreen extends Screen {
                 20
         ).build();
         button.active = active;
-        this.addRenderableWidget(button);
+        addButton(button);
+    }
+
+    private Button addButton(Button button) {
+        this.styledButtons.add(button);
+        return this.addRenderableWidget(button);
     }
 
     private int rowTop(int row) {
@@ -160,6 +168,17 @@ public final class QuestListScreen extends Screen {
         QuestLedgerTheme.drawBackdrop(graphics, this.frame);
         QuestLedgerTheme.drawHeader(graphics, this.frame, this.layout.contentTop() - 3);
         QuestLedgerTheme.drawFooter(graphics, this.frame, this.layout.contentBottom());
+
+        List<QuestDefinition> quests = quests();
+        int firstIndex = this.page * this.layout.questsPerPage();
+        int lastIndex = Math.min(quests.size(), firstIndex + this.layout.questsPerPage());
+        if (quests.isEmpty()) {
+            drawEmptyCard(graphics);
+        } else {
+            for (int index = firstIndex; index < lastIndex; index++) {
+                drawQuestCard(graphics, quests.get(index), index - firstIndex);
+            }
+        }
     }
 
     @Override
@@ -189,11 +208,11 @@ public final class QuestListScreen extends Screen {
         int firstIndex = this.page * this.layout.questsPerPage();
         int lastIndex = Math.min(quests.size(), firstIndex + this.layout.questsPerPage());
         if (quests.isEmpty()) {
-            drawEmptyState(graphics);
+            drawEmptyText(graphics);
         }
 
         for (int index = firstIndex; index < lastIndex; index++) {
-            drawQuest(graphics, quests.get(index), index - firstIndex);
+            drawQuestContent(graphics, quests.get(index), index - firstIndex);
         }
 
         Component pageLabel = Component.translatable(
@@ -214,31 +233,57 @@ public final class QuestListScreen extends Screen {
                 QuestLedgerTheme.MUTED,
                 false
         );
+
+        for (Button button : this.styledButtons) {
+            QuestLedgerTheme.drawButton(graphics, this.font, button, mouseX, mouseY);
+        }
     }
 
-    private void drawEmptyState(GuiGraphicsExtractor graphics) {
-        int cardLeft = this.frame.left() + this.layout.padding();
-        int cardRight = this.frame.right() - this.layout.padding();
-        int cardTop = this.layout.contentTop() + 14;
-        int cardBottom = Math.min(this.layout.contentBottom() - 10, cardTop + 72);
-        QuestLedgerTheme.drawCard(graphics, cardLeft, cardTop, cardRight, cardBottom, false);
+    private int emptyCardLeft() {
+        return this.frame.left() + this.layout.padding();
+    }
+
+    private int emptyCardRight() {
+        return this.frame.right() - this.layout.padding();
+    }
+
+    private int emptyCardTop() {
+        return this.layout.contentTop() + 14;
+    }
+
+    private int emptyCardBottom() {
+        return Math.min(this.layout.contentBottom() - 10, emptyCardTop() + 72);
+    }
+
+    private void drawEmptyCard(GuiGraphicsExtractor graphics) {
+        QuestLedgerTheme.drawCard(
+                graphics,
+                emptyCardLeft(),
+                emptyCardTop(),
+                emptyCardRight(),
+                emptyCardBottom(),
+                false
+        );
+    }
+
+    private void drawEmptyText(GuiGraphicsExtractor graphics) {
         Component empty = Component.translatable("screen.questledger.list.empty");
         String fitted = QuestLedgerUiLayout.ellipsize(
                 this.font::width,
                 empty.getString(),
-                cardRight - cardLeft - 32
+                emptyCardRight() - emptyCardLeft() - 32
         );
         graphics.text(
                 this.font,
                 Component.literal(fitted),
-                cardLeft + (cardRight - cardLeft - this.font.width(fitted)) / 2,
-                cardTop + Math.max(12, (cardBottom - cardTop - 9) / 2),
+                emptyCardLeft() + (emptyCardRight() - emptyCardLeft() - this.font.width(fitted)) / 2,
+                emptyCardTop() + Math.max(12, (emptyCardBottom() - emptyCardTop() - 9) / 2),
                 QuestLedgerTheme.MUTED,
                 false
         );
     }
 
-    private void drawQuest(
+    private void drawQuestCard(
             GuiGraphicsExtractor graphics,
             QuestDefinition quest,
             int row
@@ -247,8 +292,25 @@ public final class QuestListScreen extends Screen {
         int left = this.frame.left() + this.layout.padding();
         int right = this.frame.right() - this.layout.padding();
         int bottom = Math.min(this.layout.contentBottom(), y + this.layout.cardHeight());
-        boolean completing = QuestCompletionController.isCompleting(quest);
-        QuestLedgerTheme.drawCard(graphics, left, y, right, bottom, completing);
+        QuestLedgerTheme.drawCard(
+                graphics,
+                left,
+                y,
+                right,
+                bottom,
+                QuestCompletionController.isCompleting(quest)
+        );
+    }
+
+    private void drawQuestContent(
+            GuiGraphicsExtractor graphics,
+            QuestDefinition quest,
+            int row
+    ) {
+        int y = rowTop(row);
+        int left = this.frame.left() + this.layout.padding();
+        int right = this.frame.right() - this.layout.padding();
+        int bottom = Math.min(this.layout.contentBottom(), y + this.layout.cardHeight());
 
         QuestExpressionInspector.CompletionMode completionMode =
                 QuestExpressionInspector.completionMode(quest);
@@ -269,7 +331,7 @@ public final class QuestListScreen extends Screen {
         };
         int badgeWidth = 46;
         int badgeX = left + 10;
-        int badgeY = y + 7;
+        int badgeY = y + Math.max(4, (this.layout.cardHeight() - 30) / 2);
         QuestLedgerTheme.drawBadge(
                 graphics,
                 this.font,
@@ -293,7 +355,7 @@ public final class QuestListScreen extends Screen {
                 this.font,
                 Component.literal(fittedTitle),
                 textX,
-                y + 6,
+                badgeY - 1,
                 QuestLedgerTheme.INK,
                 false
         );
@@ -315,7 +377,7 @@ public final class QuestListScreen extends Screen {
                 this.font,
                 Component.literal(fittedDetail),
                 textX,
-                Math.min(bottom - 12, y + 22),
+                Math.min(bottom - 11, badgeY + 15),
                 QuestLedgerTheme.MUTED,
                 false
         );
