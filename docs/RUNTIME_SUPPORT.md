@@ -1,32 +1,31 @@
 # QuestScript runtime support
 
-This document describes which QuestScript expressions Quest Ledger 0.3 can evaluate in Minecraft 26.2.
+This document describes the QuestScript expressions Quest Ledger 0.4.3 can evaluate in Minecraft 26.2.
 
 ## Evaluation lifecycle
 
 Active quests are evaluated every five client ticks.
 
 1. The current singleplayer world or multiplayer server scope is resolved.
-2. The completion expression is evaluated against the current local player, world, statistic baselines, and manual confirmation state.
-3. If the expression is true, completion starts immediately.
-4. A fixed internal 700 ms completion effect plays.
-5. The quest is removed and the completion timestamp, quest ID, and title are appended to the current scope's `completed-history.log`.
+2. Multiplayer clients periodically request the server's current vanilla statistics.
+3. The completion expression is evaluated against the current player, synchronized statistics, saved baselines, and manual confirmation state.
+4. If the expression is true, completion begins immediately.
+5. A fixed internal 700 ms effect plays.
+6. The quest is removed and its timestamp, ID, and title are appended to the scope's `completed-history.log`.
 
-There is no configurable `hold` or removal timer. Legacy timer fields can still be parsed from older files, but runtime evaluation ignores them and user-facing QuestScript does not output them.
+There is no configurable completion timer. Legacy timer fields are parseable but ignored.
 
-A runtime value that is not implemented evaluates as unknown, never as true. Unknown conditions are logged once instead of silently completing or deleting a quest.
+A runtime value that cannot be evaluated is unknown, never true. Existing older files with deferred expressions remain loaded safely. When creating or replacing quests through the mod, runtime-support validation now rejects deferred expressions with `UNSUPPORTED_RUNTIME`, preventing permanently incomplete new quests.
 
-Switching to another world or server immediately unloads the previous scope and clears any active completion effect. Returning to that scope reloads its own quests, statistic baselines, and manual confirmation state.
+Switching to another world or server unloads the previous scope and its completion effect. Returning reloads that scope's quests, baselines, manual state, and history.
 
 ## Completion modes
 
 ### Automatic
 
-The completion expression contains only measurable values. Examples include combat statistics, mining, item possession, location, dimension, health, hunger, and supported logical combinations.
+The expression contains only measurable values: statistics, inventory, location, player state, or supported logical combinations.
 
 ### Manual
-
-A manual quest contains `manual.checked` and no other measurable requirement.
 
 ```questscript
 quest "금 공장 완성" {
@@ -36,11 +35,9 @@ quest "금 공장 완성" {
 }
 ```
 
-Press **Confirm Complete** on the Active Quests screen. The confirmation is persisted in `manual-state.properties`.
+Press **Complete** in Active Quests. The confirmation is persisted in `manual-state.properties` until the quest completes.
 
 ### Hybrid
-
-A hybrid quest contains `manual.checked` and one or more automatic conditions.
 
 ```questscript
 quest "금 공장 가동 확인" {
@@ -51,7 +48,7 @@ quest "금 공장 가동 확인" {
 }
 ```
 
-Manual confirmation satisfies only `manual.checked`; every remaining condition must also be true.
+Manual confirmation satisfies only `manual.checked`; all automatic conditions must also be true.
 
 ## Supported operators
 
@@ -65,7 +62,7 @@ Manual confirmation satisfies only `manual.checked`; every remaining condition m
 - `<`
 - `<=`
 
-Nested expressions and parentheses are supported through the QuestScript AST.
+Nested expressions and parentheses are supported.
 
 ## Supported player properties
 
@@ -80,35 +77,31 @@ Nested expressions and parentheses are supported through the QuestScript AST.
 | `player.on_ground` | Whether the player is on the ground |
 | `player.is_sneaking` | Whether sneak is held |
 | `player.is_sprinting` | Whether the player is sprinting |
-| `manual.checked` | Persistent confirmation for this quest in the current scope |
+| `manual.checked` | Persistent confirmation for this quest and scope |
 
 ## Supported inventory functions
 
 | Function | Behavior |
 |---|---|
-| `inventory.count(id)` | Counts matching inventory items |
+| `inventory.count(id)` | Counts matching items in the inventory |
 | `inventory.has(id)` | True when at least one matching item exists |
-| `inventory.equipped(id)` | Checks all equipment slots, including hands |
+| `inventory.equipped(id)` | Checks equipment slots, including hands |
 | `inventory.durability(id)` | Remaining durability of the first matching damageable stack |
 
-Inventory functions inspect the current inventory and are absolute, not creation-relative.
-
-Item tags such as `#minecraft:logs` are parsed but are not evaluated yet. Use an exact namespaced item ID for automatic completion.
+Inventory functions are absolute. Use an exact namespaced ID. Tags are deferred and rejected for new saves.
 
 ## Supported statistic functions
 
-| Function | Value returned at runtime |
+| Function | Value returned |
 |---|---|
-| `stat.mined(block_id)` | Blocks mined since this quest was created |
-| `stat.used(item_id)` | Items used since this quest was created |
-| `stat.crafted(item_id)` | Items crafted since this quest was created |
-| `stat.killed(entity_id)` | Entities killed since this quest was created |
-| `stat.picked_up(item_id)` | Items picked up since this quest was created |
-| `stat.dropped(item_id)` | Items dropped since this quest was created |
+| `stat.mined(block_id)` | Blocks mined since quest creation |
+| `stat.used(item_id)` | Items used since quest creation |
+| `stat.crafted(item_id)` | Items crafted since quest creation |
+| `stat.killed(entity_id)` | Entities killed since quest creation |
+| `stat.picked_up(item_id)` | Items picked up since quest creation |
+| `stat.dropped(item_id)` | Items dropped since quest creation |
 
-When a quest is saved, Quest Ledger snapshots every vanilla statistic referenced by its completion expression. Runtime evaluation subtracts that saved baseline from the current vanilla value.
-
-For example:
+When a quest is saved, Quest Ledger snapshots every referenced statistic. Runtime evaluation subtracts the baseline from the latest vanilla value.
 
 ```questscript
 quest "고대 잔해 네 개 더" {
@@ -118,38 +111,54 @@ quest "고대 잔해 네 개 더" {
 }
 ```
 
-If the player had already mined 100 ancient debris when the quest was created, the expression begins at `0` and completes when the vanilla total reaches 104.
+If the synchronized total is 100 when the quest is created, the expression begins at 0 and completes at 104.
 
-Baselines are stored in `runtime-state.properties`, survive restarts, and are removed with their quest. If a server resets a vanilla statistic below its stored baseline, Quest Ledger safely rebases that statistic to the new value instead of producing a negative count or completing incorrectly.
+### Multiplayer synchronization
 
-## Supported location functions
+While a multiplayer scope is active, Quest Ledger requests the server's current statistics every 100 client ticks. This keeps creation baselines and later deltas current even when the vanilla client has not otherwise refreshed the statistics screen.
+
+The integration test starts a real Fabric server, sets stone mined to 40, verifies that the client stores 40 as the baseline, advances the server value to 43, and verifies completion of a `stat.mined("minecraft:stone") >= 3` quest after the next synchronization.
+
+Baselines are stored in `runtime-state.properties` and survive restarts. If a server resets a statistic below its baseline, Quest Ledger safely rebases to the new value instead of producing a negative delta or false completion.
+
+## Supported location and quest functions
 
 ```questscript
 distance.to(100, 64, -30) <= 5
 inside.box(0, 60, 0, 32, 90, 32) == true
 inside.radius(100, 64, -30, 8) == true
+quest.active("another_quest") == true
 ```
 
-`quest.active(id_or_title)` is also available and checks the current scope's active quest store.
+`quest.active(id_or_title)` checks the current scope's active store. The 0.4.3 parser fix allows the reserved `quest` namespace to be used correctly inside expressions.
 
 ## Deferred runtime expressions
 
-The following syntax validates but currently evaluates as unknown:
+The following syntax remains parseable for compatibility but is rejected when creating new quests:
 
 - `world.time`
 - `world.day`
 - `world.is_day`
 - `world.is_night`
+- biome, weather, difficulty, and game-mode properties
 - `advancement.done(...)`
 - `quest.done(...)`
-- item tags
-- biome, weather, difficulty, and game-mode properties
+- item and block tags
 
-Minecraft 26.2 introduced named World Clocks and Timelines. Quest Ledger will add explicit clock and timeline arguments rather than pretending that one global day-time value still exists.
+Minecraft 26.2 introduced named World Clocks and Timelines. Future support will use explicit clock/timeline arguments rather than pretending that one global day-time value still exists.
+
+## Save validation
+
+QuestScript goes through two validation layers before the store is changed:
+
+1. semantic validation checks names, argument counts, resource-ID shape, value types, comparison operators, animations, and duplicate quest IDs across the **entire merged store**;
+2. runtime-support validation checks that each condition can be evaluated by the current Minecraft runtime.
+
+A rejected append or replacement does not mutate the in-memory quest list or either transactional file.
 
 ## Per-world and per-server storage
 
-Each singleplayer save and multiplayer server receives an independent directory:
+Each scope receives its own directory:
 
 ```text
 config/quest-ledger/worlds/<readable-name>-<scope-hash>/
@@ -160,31 +169,14 @@ config/quest-ledger/worlds/<readable-name>-<scope-hash>/
   completed-history.log
 ```
 
-Singleplayer scopes are keyed by the normalized world save path. Multiplayer scopes are keyed by the normalized server address. The readable directory prefix is only for convenience; the hash prevents collisions between worlds or servers with the same display name.
+Singleplayer scopes use the normalized save path. Multiplayer scopes use the normalized server address. The readable prefix is cosmetic; the hash prevents collisions.
 
-- `scope.properties` records the exact scope key, display name, and kind.
-- `runtime-state.properties` stores statistic baselines.
-- `manual-state.properties` stores manual confirmations that have not completed yet.
+`quests.qs` and `runtime-state.properties` are committed in one recoverable transaction. Manual state is stored separately and is tied to persistent runtime UUIDs.
 
-The internal state files should not normally be edited by hand.
+## Migration
 
-## Migration from earlier versions
+The former client-wide quest and history files are migrated into the first opened scope and archived under `config/quest-ledger/legacy/`. A marker prevents copying them into later scopes.
 
-The former client-wide files:
+Older versions did not record creation baselines. Migrated statistic quests therefore begin counting when first loaded by a baseline-aware version, which avoids accidental completion.
 
-```text
-config/quest-ledger/quests.qs
-config/quest-ledger/completed-history.log
-```
-
-are migrated into the first world or server opened after upgrading. The original files are archived under:
-
-```text
-config/quest-ledger/legacy/
-```
-
-A `legacy-migration.properties` marker prevents the same quests from being copied into every later scope.
-
-Older versions did not record creation-time statistic baselines. Therefore, migrated statistic quests begin counting from the moment they are first loaded by the upgraded mod. Inventing an earlier baseline would risk accidental completion, so the migration deliberately chooses the safe behavior.
-
-Quest files containing old `hold` or `remove after` fields remain readable. Those values no longer affect completion, and opening or formatting the quest in the editor produces timer-free user-facing source.
+Legacy `hold` and `remove after` fields remain readable but have no runtime effect and are removed by user-facing formatting.
