@@ -1,12 +1,9 @@
 package dev.aether.questledger.client;
 
-import com.mojang.blaze3d.pipeline.RenderTarget;
 import dev.aether.questledger.QuestLedger;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.Screenshot;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -33,61 +30,20 @@ public final class VisualSmokeTestController {
         if (ticks == 80) {
             client.gui.setScreen(new QuestLedgerScreen(null));
         } else if (ticks == 140) {
-            capture(client, "quest-ledger-builder.png", "quest-ledger-builder-ready");
-        } else if (ticks == 260) {
+            marker("quest-ledger-builder-ready");
+        } else if (ticks == 300) {
             client.gui.setScreen(new QuestTypesScreen(null));
-        } else if (ticks == 320) {
-            capture(client, "quest-ledger-types.png", "quest-ledger-types-ready");
-        } else if (ticks == 460) {
+        } else if (ticks == 360) {
+            marker("quest-ledger-types-ready");
+        } else if (ticks == 560) {
             client.stop();
         }
-    }
-
-    private static void capture(Minecraft client, String fileName, String markerName) {
-        try {
-            RenderTarget target = findMainRenderTarget(client);
-            Screenshot.grab(
-                    client.gameDirectory,
-                    fileName,
-                    target,
-                    1,
-                    message -> {
-                        QuestLedger.LOGGER.info(
-                                "Visual smoke-test screenshot result: {}",
-                                message.getString()
-                        );
-                        marker(markerName);
-                    }
-            );
-        } catch (ReflectiveOperationException exception) {
-            QuestLedger.LOGGER.error("Could not access Minecraft main render target", exception);
-            marker(markerName);
-        }
-    }
-
-    private static RenderTarget findMainRenderTarget(Minecraft client)
-            throws ReflectiveOperationException {
-        for (Field field : Minecraft.class.getDeclaredFields()) {
-            if (!RenderTarget.class.isAssignableFrom(field.getType())) {
-                continue;
-            }
-            field.setAccessible(true);
-            Object value = field.get(client);
-            QuestLedger.LOGGER.info(
-                    "Visual smoke-test found RenderTarget field '{}' ({})",
-                    field.getName(),
-                    field.getType().getName()
-            );
-            if (value instanceof RenderTarget target) {
-                return target;
-            }
-        }
-        throw new NoSuchFieldException("Minecraft has no non-null RenderTarget field");
     }
 
     private static void marker(String fileName) {
         try {
             Files.writeString(Path.of(fileName), "ready\n");
+            QuestLedger.LOGGER.info("Visual smoke-test marker ready: {}", fileName);
         } catch (IOException exception) {
             QuestLedger.LOGGER.error("Could not write visual smoke-test marker", exception);
         }
