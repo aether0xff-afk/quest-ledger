@@ -89,7 +89,7 @@ public final class TransactionalFilePair {
             throw exception;
         }
 
-        cleanupArtifacts(paths);
+        cleanupCommittedArtifacts(paths);
     }
 
     /**
@@ -113,7 +113,7 @@ public final class TransactionalFilePair {
             if (!Files.exists(firstPath) || !Files.exists(secondPath)) {
                 throw new IOException("Committed Quest Ledger transaction is missing a live file.");
             }
-            cleanupArtifacts(paths);
+            cleanupCommittedArtifacts(paths);
             return;
         }
 
@@ -153,6 +153,14 @@ public final class TransactionalFilePair {
         StringWriter writer = new StringWriter();
         properties.store(writer, "Quest Ledger two-file transaction");
         writeAtomically(journalPath, writer.toString());
+    }
+
+    private static void cleanupCommittedArtifacts(Paths paths) {
+        try {
+            cleanupArtifacts(paths);
+        } catch (IOException ignored) {
+            // The committed live files are already valid. A later recovery or save retries cleanup.
+        }
     }
 
     private static void cleanupArtifacts(Paths paths) throws IOException {
