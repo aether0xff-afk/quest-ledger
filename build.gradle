@@ -19,6 +19,12 @@ loom {
             sourceSet sourceSets.client
         }
     }
+
+    runs {
+        server {
+            runDir "run-server"
+        }
+    }
 }
 
 dependencies {
@@ -60,6 +66,14 @@ tasks.register('questScriptSelfTest', JavaExec) {
     mainClass = 'dev.aether.questledger.questscript.QuestScriptSelfTest'
 }
 
+tasks.register('questFunctionalSelfTest', JavaExec) {
+    group = 'verification'
+    description = 'Runs save-facing QuestScript feature, runtime-support, and fuzz checks.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.aether.questledger.questscript.QuestFunctionalSelfTest'
+}
+
 tasks.register('transactionalStoreSelfTest', JavaExec) {
     group = 'verification'
     description = 'Runs the recoverable two-file store transaction self-test.'
@@ -82,6 +96,7 @@ tasks.named('test') {
 
 check.dependsOn(
         tasks.named('questScriptSelfTest'),
+        tasks.named('questFunctionalSelfTest'),
         tasks.named('transactionalStoreSelfTest'),
         tasks.named('uiLayoutSelfTest')
 )
