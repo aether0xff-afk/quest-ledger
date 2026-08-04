@@ -24,7 +24,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            xvfb openbox xdotool imagemagick \
+            xvfb openbox imagemagick \
             mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libasound2t64
       - name: Launch Minecraft 26.2 and capture Quest Ledger
         env:
@@ -53,65 +53,66 @@ jobs:
 
           wait_for_marker() {
             local marker="$1"
-            for _ in $(seq 1 240); do
+            for _ in $(seq 1 300); do
               [ -f "$marker" ] && return 0
               [ -f "run/$marker" ] && return 0
               if ! kill -0 "$GAME_PID" 2>/dev/null; then
-                echo 'Minecraft exited before the UI marker appeared.'
-                tail -n 200 visual-output/client.log || true
+                echo 'Minecraft exited before the screenshot marker appeared.'
+                tail -n 250 visual-output/client.log || true
                 exit 1
               fi
               sleep 1
             done
             echo "Timed out waiting for $marker"
-            tail -n 200 visual-output/client.log || true
+            tail -n 250 visual-output/client.log || true
             exit 1
           }
 
-          capture_with_f2() {
+          collect_candidates() {
             local marker="$1"
-            local output="$2"
+            local prefix="$2"
+            local selected="$3"
             wait_for_marker "$marker"
 
-            mkdir -p run/screenshots
-            local before
-            before=$(find run/screenshots -maxdepth 1 -type f -name '*.png' | wc -l)
-            echo "Active window before F2:"
-            xdotool getactivewindow getwindowname || true
-            xdotool key --clearmodifiers F2
+            [ -f "run/${prefix}-targets.txt" ] && \
+              cp "run/${prefix}-targets.txt" visual-output/
 
-            local source=''
-            for _ in $(seq 1 60); do
-              local after
-              after=$(find run/screenshots -maxdepth 1 -type f -name '*.png' | wc -l)
-              if [ "$after" -gt "$before" ]; then
-                source=$(find run/screenshots -maxdepth 1 -type f -name '*.png' \
-                  -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)
-                break
-              fi
-              sleep 1
-            done
-
-            if [ -z "$source" ]; then
-              echo "F2 did not create a screenshot for $marker."
-              xdotool search --onlyvisible --name '.*' getwindowname %@ || true
-              tail -n 200 visual-output/client.log || true
+            shopt -s nullglob
+            local candidates=(run/screenshots/${prefix}-target-*.png)
+            if [ "${#candidates[@]}" -eq 0 ]; then
+              echo "No RenderTarget screenshot candidates were created for $prefix."
+              cat "run/${prefix}-targets.txt" 2>/dev/null || true
+              tail -n 250 visual-output/client.log || true
               exit 1
             fi
 
-            cp "$source" "visual-output/$output"
-            identify "visual-output/$output"
-            local mean
-            mean=$(convert "visual-output/$output" -colorspace gray -format '%[fx:mean]' info:)
-            echo "$output grayscale mean: $mean"
-            awk -v mean="$mean" 'BEGIN { if (mean < 0.01) exit 1 }'
+            local best_file=''
+            local best_mean='0'
+            for source in "${candidates[@]}"; do
+              local base
+              base=$(basename "$source")
+              cp "$source" "visual-output/$base"
+              identify "visual-output/$base"
+              local mean
+              mean=$(convert "visual-output/$base" -colorspace gray \
+                -format '%[fx:mean]' info:)
+              echo "$base grayscale mean: $mean"
+              if awk -v a="$mean" -v b="$best_mean" 'BEGIN { exit !(a > b) }'; then
+                best_mean="$mean"
+                best_file="visual-output/$base"
+              fi
+            done
+
+            echo "$prefix best grayscale mean: $best_mean"
+            awk -v mean="$best_mean" 'BEGIN { if (mean < 0.01) exit 1 }'
+            cp "$best_file" "visual-output/$selected"
           }
 
-          capture_with_f2 quest-ledger-builder-ready quest-ledger-builder.png
-          capture_with_f2 quest-ledger-types-ready quest-ledger-types.png
+          collect_candidates quest-ledger-builder-ready builder quest-ledger-builder.png
+          collect_candidates quest-ledger-types-ready types quest-ledger-types.png
 
           wait "$GAME_PID" || {
-            tail -n 200 visual-output/client.log || true
+            tail -n 250 visual-output/client.log || true
             exit 1
           }
       - name: Upload real Minecraft screenshots
