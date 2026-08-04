@@ -49,7 +49,8 @@ jobs:
           motd=Quest Ledger functional smoke
           EOF_SERVER
 
-          gradle runServer --no-daemon --stacktrace >functional-output/server.log 2>&1 &
+          QUEST_LEDGER_FUNCTIONAL_SERVER=1 \
+            gradle runServer --no-daemon --stacktrace >functional-output/server.log 2>&1 &
           echo $! > functional-output/server.pid
 
           for _ in $(seq 1 360); do
