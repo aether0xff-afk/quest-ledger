@@ -1,6 +1,7 @@
 package dev.aether.questledger.client;
 
 import dev.aether.questledger.QuestLedger;
+import dev.aether.questledger.client.QuestStatisticAccess.StatReference;
 import dev.aether.questledger.questscript.ast.QuestDefinition;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
@@ -10,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.OptionalLong;
 
 /**
  * CI-only real-world functional smoke controller. It is inert during normal play and only
@@ -22,6 +24,8 @@ public final class FunctionalSmokeTestController {
     private static int worldTicks;
     private static boolean initialized;
     private static boolean completionAnimationObserved;
+    private static boolean statisticQuestCreated;
+    private static boolean statisticBaselineObserved;
     private static boolean finished;
 
     private FunctionalSmokeTestController() {
@@ -47,11 +51,14 @@ public final class FunctionalSmokeTestController {
                 if ("1".equals(PHASE)) {
                     beginFirstPass();
                 } else {
-                    beginSecondPass(client);
+                    beginSecondPass();
                 }
             }
 
-            if ("1".equals(PHASE) && worldTicks >= 160) {
+            if ("1".equals(PHASE) && worldTicks >= 140 && !statisticQuestCreated) {
+                createStatisticQuest(client);
+            }
+            if ("1".equals(PHASE) && worldTicks >= 300) {
                 verifyFirstPass(client);
             } else if ("2".equals(PHASE) && worldTicks >= 30) {
                 finishSecondPass(client);
@@ -115,15 +122,32 @@ public final class FunctionalSmokeTestController {
                 "wax_seal"
         )).success(), "Inventory quest could not be saved");
 
-        require(ClientQuestStore.append(quest(
-                "stat_target",
-                "통계 자동 판정",
-                "stat.mined(\"minecraft:stone\") >= 0",
-                "ink_check"
-        )).success(), "Statistic quest could not be saved");
-
         QuestDefinition manual = findById("manual_target");
         require(ManualQuestStore.markChecked(manual), "Manual confirmation was not persisted");
+    }
+
+    private static void createStatisticQuest(Minecraft client) {
+        statisticQuestCreated = true;
+        StatReference reference = new StatReference("stat.mined", "minecraft:stone");
+        OptionalLong current = QuestStatisticAccess.read(client.player, reference);
+        require(current.isPresent(), "The live stone-mined statistic was unavailable");
+        require(current.getAsLong() >= 40,
+                "The server statistic baseline was not synchronized: " + current.getAsLong());
+
+        ClientQuestStore.SaveResult save = ClientQuestStore.append(quest(
+                "stat_target",
+                "통계 증가 자동 판정",
+                "stat.mined(\"minecraft:stone\") >= 3",
+                "ink_check"
+        ));
+        require(save.success(), "Statistic quest could not be saved: " + save.message());
+        QuestDefinition statisticQuest = findById("stat_target");
+        require(ClientQuestStore.statisticDelta(
+                statisticQuest,
+                reference,
+                current.getAsLong()
+        ) == 0L, "Statistic quest did not capture the synchronized creation baseline");
+        statisticBaselineObserved = true;
     }
 
     private static void verifyFirstPass(Minecraft client) throws IOException {
@@ -131,6 +155,8 @@ public final class FunctionalSmokeTestController {
         require(active.size() == 1, "Expected one persistent quest, found " + active.size());
         require(active.getFirst().id().orElse("").equals("persistent_target"),
                 "Unexpected quest survived automatic completion");
+        require(statisticBaselineObserved,
+                "The non-zero creation-relative statistic baseline was not verified");
         require(completionAnimationObserved, "No completion animation state was observed");
 
         Path scopeDirectory = scopeDirectory();
@@ -149,7 +175,7 @@ public final class FunctionalSmokeTestController {
         pass(client, "functional-smoke-phase-1-success");
     }
 
-    private static void beginSecondPass(Minecraft client) {
+    private static void beginSecondPass() {
         List<QuestDefinition> restored = ClientQuestStore.snapshot().quests();
         require(restored.size() == 1, "Restart did not restore exactly one quest");
         require(restored.getFirst().id().orElse("").equals("persistent_target"),
@@ -159,7 +185,7 @@ public final class FunctionalSmokeTestController {
         require(ClientQuestStore.replace("").success(), "Could not clear restored quest");
         require(ClientQuestStore.snapshot().quests().isEmpty(),
                 "Cleared quest remained in memory");
-        marker(client, "functional-smoke-phase-2-cleared", "cleared\n");
+        marker(Minecraft.getInstance(), "functional-smoke-phase-2-cleared", "cleared\n");
     }
 
     private static void finishSecondPass(Minecraft client) {
