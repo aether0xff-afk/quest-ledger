@@ -1,18 +1,21 @@
 # QuestScript runtime support
 
-This document describes which QuestScript expressions Quest Ledger v0.3 can evaluate automatically in Minecraft 26.2.
+This document describes which QuestScript expressions Quest Ledger 0.2 can evaluate automatically in Minecraft 26.2.
 
 ## Evaluation lifecycle
 
 Active quests are evaluated every five client ticks.
 
-1. The completion expression is evaluated against the current local player and client world.
-2. If it is false, any in-progress `hold` timer resets.
-3. If it remains true for the quest's `hold` duration, completion animation begins.
-4. The quest is removed after the greater of `remove after` and 450 ms.
-5. The completion timestamp, quest ID, and title are appended to `completed-history.log`.
+1. The current singleplayer world or multiplayer server scope is resolved.
+2. The completion expression is evaluated against the current local player and client world.
+3. If it is false, any in-progress `hold` timer resets.
+4. If it remains true for the quest's `hold` duration, completion animation begins.
+5. The quest is removed after the greater of `remove after` and 450 ms.
+6. The completion timestamp, quest ID, and title are appended to the current scope's `completed-history.log`.
 
 A runtime value that is not implemented evaluates as unknown, never as true. Unknown conditions are logged once instead of silently completing or deleting a quest.
+
+Switching to another world or server immediately unloads the previous scope and clears in-progress hold/completion timers. Returning to that scope reloads its own quests and runtime state.
 
 ## Supported operators
 
@@ -51,20 +54,36 @@ Nested expressions and parentheses are supported through the QuestScript AST.
 | `inventory.equipped(id)` | Checks all equipment slots, including hands |
 | `inventory.durability(id)` | Remaining durability of the first matching damageable stack |
 
+Inventory functions inspect the current inventory and are absolute, not creation-relative.
+
 Item tags such as `#minecraft:logs` are parsed but are not evaluated yet. Use an exact namespaced item ID for automatic completion.
 
 ## Supported statistic functions
 
-| Function | Vanilla statistic |
+| Function | Value returned at runtime |
 |---|---|
-| `stat.mined(block_id)` | Blocks mined |
-| `stat.used(item_id)` | Items used |
-| `stat.crafted(item_id)` | Items crafted |
-| `stat.killed(entity_id)` | Entities killed |
-| `stat.picked_up(item_id)` | Items picked up |
-| `stat.dropped(item_id)` | Items dropped |
+| `stat.mined(block_id)` | Blocks mined since this quest was created |
+| `stat.used(item_id)` | Items used since this quest was created |
+| `stat.crafted(item_id)` | Items crafted since this quest was created |
+| `stat.killed(entity_id)` | Entities killed since this quest was created |
+| `stat.picked_up(item_id)` | Items picked up since this quest was created |
+| `stat.dropped(item_id)` | Items dropped since this quest was created |
 
-These are the player's cumulative vanilla statistics. A quest created after the statistic already reached its threshold can complete immediately. A future baseline operator will support goals such as “mine four more blocks from now.”
+When a quest is saved, Quest Ledger snapshots every vanilla statistic referenced by its completion expression. Runtime evaluation subtracts that saved baseline from the current vanilla value.
+
+For example:
+
+```questscript
+quest "고대 잔해 네 개 더" {
+  complete when {
+    stat.mined("minecraft:ancient_debris") >= 4
+  }
+}
+```
+
+If the player had already mined 100 ancient debris when the quest was created, the expression begins at `0` and completes when the vanilla total reaches 104.
+
+Baselines are stored in `runtime-state.properties`, survive restarts, and are removed with their quest. If a server resets a vanilla statistic below its stored baseline, Quest Ledger safely rebases that statistic to the new value instead of producing a negative count or completing incorrectly.
 
 ## Supported location functions
 
@@ -74,7 +93,7 @@ inside.box(0, 60, 0, 32, 90, 32) == true
 inside.radius(100, 64, -30, 8) == true
 ```
 
-`quest.active(id_or_title)` is also available and checks the current active client quest store.
+`quest.active(id_or_title)` is also available and checks the current scope's active quest store.
 
 ## Deferred runtime expressions
 
@@ -92,18 +111,37 @@ The following syntax validates but currently evaluates as unknown:
 
 Minecraft 26.2 introduced named World Clocks and Timelines. Quest Ledger will add explicit clock and timeline arguments rather than pretending that one global day-time value still exists.
 
-## Storage scope
+## Per-world and per-server storage
 
-Active quests are currently stored at:
+Each singleplayer save and multiplayer server receives an independent directory:
+
+```text
+config/quest-ledger/worlds/<readable-name>-<scope-hash>/
+  scope.properties
+  quests.qs
+  runtime-state.properties
+  completed-history.log
+```
+
+Singleplayer scopes are keyed by the normalized world save path. Multiplayer scopes are keyed by the normalized server address. The readable directory prefix is only for convenience; the hash prevents collisions between worlds or servers with the same display name.
+
+`scope.properties` records the exact scope key, display name, and kind. `runtime-state.properties` is internal state and should not normally be edited by hand.
+
+## Migration from 0.1
+
+The former client-wide files:
 
 ```text
 config/quest-ledger/quests.qs
-```
-
-Completion history is currently stored at:
-
-```text
 config/quest-ledger/completed-history.log
 ```
 
-Both files are client-wide. Per-world and per-server profiles are planned before the first stable release.
+are migrated into the first world or server opened after upgrading. The original files are archived under:
+
+```text
+config/quest-ledger/legacy/
+```
+
+A `legacy-migration.properties` marker prevents the same quests from being copied into every later scope.
+
+Older versions did not record creation-time statistic baselines. Therefore, migrated statistic quests begin counting from the moment they are first loaded by the upgraded mod. Inventing an earlier baseline would risk accidental completion, so the migration deliberately chooses the safe behavior.

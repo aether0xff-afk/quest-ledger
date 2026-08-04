@@ -17,18 +17,51 @@ Quest Ledger currently includes:
 - Builder and QuestScript editor tabs backed by the same typed AST;
 - parsing and semantic validation before save or mode conversion;
 - Builder conditions for inventory items, mined blocks, and killed mobs;
-- automatic evaluation of supported QuestScript conditions every five client ticks;
-- `hold` duration handling before a quest is considered complete;
+- automatic runtime evaluation every five client ticks;
+- creation-relative mining, crafting, use, pickup, drop, and kill statistics;
+- persisted per-quest statistic baselines that survive restarts;
+- independent quest stores for every singleplayer world and multiplayer server;
+- safe migration and archival of the old client-wide store;
 - `wax_seal`, `ink_check`, and `page_fold` completion effects;
-- automatic removal after the configured `remove after` duration;
-- a completion log at `config/quest-ledger/completed-history.log`;
-- canonical QuestScript persistence at `config/quest-ledger/quests.qs`;
+- automatic removal and per-scope completion history;
 - an animated HUD showing up to three active quests;
 - Korean and English localization;
 - backend-neutral GUI rendering for both Vulkan and OpenGL;
 - parser self-tests and a GitHub Actions build.
 
-See [`docs/RUNTIME_SUPPORT.md`](docs/RUNTIME_SUPPORT.md) for the exact automatic-completion support matrix and current limitations.
+## Storage
+
+Each world or server receives its own directory:
+
+```text
+config/quest-ledger/worlds/<scope-name>-<hash>/
+  scope.properties
+  quests.qs
+  runtime-state.properties
+  completed-history.log
+```
+
+Singleplayer scopes use the normalized save path. Multiplayer scopes use the server address. Switching worlds or servers unloads the previous scope before loading the next one.
+
+When upgrading from 0.1, the old client-wide quest and history files are moved into the first opened scope and archived under `config/quest-ledger/legacy/`.
+
+## Statistic semantics
+
+QuestScript statistic functions count progress made **after that quest was created**:
+
+```questscript
+quest "고대 잔해 네 개 더" {
+  complete when {
+    stat.mined("minecraft:ancient_debris") >= 4
+  }
+
+  animation "wax_seal"
+}
+```
+
+If the vanilla statistic was already 100 when the quest was saved, Quest Ledger stores 100 as the baseline and completes at 104. The baseline is kept in `runtime-state.properties` and survives game restarts.
+
+Inventory conditions remain absolute. For example, `inventory.count("minecraft:diamond") >= 4` checks the player's current inventory rather than items acquired after creation.
 
 ## Toolchain
 
@@ -57,33 +90,16 @@ On Windows:
 
 The remapped mod JAR is produced in `build/libs/`.
 
-## Small example
+See [`docs/QUESTSCRIPT.md`](docs/QUESTSCRIPT.md), [`docs/ASK_GPT.md`](docs/ASK_GPT.md), [`docs/EDITOR_MODES.md`](docs/EDITOR_MODES.md), and [`docs/RUNTIME_SUPPORT.md`](docs/RUNTIME_SUPPORT.md).
 
-```questscript
-quest "네더라이트 하나 더" {
-  id "one_more_netherite"
-  description "네더라이트 주괴를 하나 확보한다."
+## Known deferred features
 
-  complete when {
-    inventory.count("minecraft:netherite_ingot") >= 1
-    or stat.mined("minecraft:ancient_debris") >= 4
-  }
-
-  hold 1s
-  remove after 1200ms
-  animation "wax_seal"
-}
-```
-
-See [`docs/QUESTSCRIPT.md`](docs/QUESTSCRIPT.md), [`docs/ASK_GPT.md`](docs/ASK_GPT.md), and [`docs/EDITOR_MODES.md`](docs/EDITOR_MODES.md).
-
-## Current limitations
-
-- Quest storage is currently client-wide, not separated per world or server.
-- Vanilla statistic conditions use the player's existing cumulative statistics; they are not automatically rebased when a quest is created.
-- Item tags, advancement completion, `quest.done`, manual checkboxes, and a completed-history screen are not implemented yet.
-- Minecraft 26.2 World Clock/Timeline conditions are validation-only until QuestScript can name a specific clock and timeline.
-- CI verifies compilation, parser tests, and JAR creation. Vulkan and OpenGL graphical launches still require manual smoke testing on a game client.
+- item-tag evaluation;
+- advancement completion and `quest.done`;
+- biome, weather, difficulty, and game-mode properties;
+- manual checkbox quests;
+- explicit Minecraft 26.2 World Clock and Timeline conditions;
+- an in-game quest/history management screen.
 
 ## License
 
