@@ -1,10 +1,12 @@
 package dev.aether.questledger.client;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import dev.aether.questledger.QuestLedger;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -42,19 +44,27 @@ public final class VisualSmokeTestController {
     }
 
     private static void capture(Minecraft client, String fileName, String markerName) {
-        Screenshot.grab(
-                client.gameDirectory,
-                fileName,
-                client.getMainRenderTarget(),
-                1,
-                message -> {
-                    QuestLedger.LOGGER.info(
-                            "Visual smoke-test screenshot result: {}",
-                            message.getString()
-                    );
-                    marker(markerName);
-                }
-        );
+        try {
+            Field targetField = Minecraft.class.getDeclaredField("mainRenderTarget");
+            targetField.setAccessible(true);
+            RenderTarget target = (RenderTarget) targetField.get(client);
+            Screenshot.grab(
+                    client.gameDirectory,
+                    fileName,
+                    target,
+                    1,
+                    message -> {
+                        QuestLedger.LOGGER.info(
+                                "Visual smoke-test screenshot result: {}",
+                                message.getString()
+                        );
+                        marker(markerName);
+                    }
+            );
+        } catch (ReflectiveOperationException exception) {
+            QuestLedger.LOGGER.error("Could not access Minecraft main render target", exception);
+            marker(markerName);
+        }
     }
 
     private static void marker(String fileName) {
