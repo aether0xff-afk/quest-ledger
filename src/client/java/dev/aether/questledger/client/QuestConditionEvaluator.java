@@ -1,30 +1,29 @@
 package dev.aether.questledger.client;
 
+import dev.aether.questledger.client.QuestStatisticAccess.StatReference;
 import dev.aether.questledger.questscript.ast.ComparisonOperator;
 import dev.aether.questledger.questscript.ast.Expression;
 import dev.aether.questledger.questscript.ast.LogicalOperator;
+import dev.aether.questledger.questscript.ast.QuestDefinition;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
-import net.minecraft.stats.Stats;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.Block;
 
 import java.util.List;
 import java.util.Optional;
 
 public final class QuestConditionEvaluator {
-    public Result evaluate(Expression expression, Minecraft minecraft) {
+    public Result evaluate(QuestDefinition quest, Minecraft minecraft) {
         LocalPlayer player = minecraft.player;
         if (player == null || minecraft.level == null) {
             return Result.unknown("No active player or level.");
         }
 
-        Value value = valueOf(expression, minecraft, player);
+        Value value = valueOf(quest.completionCondition(), quest, minecraft, player);
         if (value instanceof Value.BooleanValue booleanValue) {
             return Result.known(booleanValue.value());
         }
@@ -34,7 +33,12 @@ public final class QuestConditionEvaluator {
         return Result.unknown("Completion expression did not evaluate to a boolean.");
     }
 
-    private Value valueOf(Expression expression, Minecraft minecraft, LocalPlayer player) {
+    private Value valueOf(
+            Expression expression,
+            QuestDefinition quest,
+            Minecraft minecraft,
+            LocalPlayer player
+    ) {
         if (expression instanceof Expression.BooleanLiteral literal) {
             return new Value.BooleanValue(literal.value());
         }
@@ -45,37 +49,38 @@ public final class QuestConditionEvaluator {
             return new Value.StringValue(literal.value());
         }
         if (expression instanceof Expression.Not not) {
-            Value operand = valueOf(not.operand(), minecraft, player);
+            Value operand = valueOf(not.operand(), quest, minecraft, player);
             if (operand instanceof Value.BooleanValue booleanValue) {
                 return new Value.BooleanValue(!booleanValue.value());
             }
             return unknownFrom(operand, "not requires a boolean value.");
         }
         if (expression instanceof Expression.Logical logical) {
-            return logicalValue(logical, minecraft, player);
+            return logicalValue(logical, quest, minecraft, player);
         }
         if (expression instanceof Expression.Comparison comparison) {
             return compare(
-                    valueOf(comparison.left(), minecraft, player),
+                    valueOf(comparison.left(), quest, minecraft, player),
                     comparison.operator(),
-                    valueOf(comparison.right(), minecraft, player)
+                    valueOf(comparison.right(), quest, minecraft, player)
             );
         }
         if (expression instanceof Expression.Reference reference) {
             return referenceValue(reference.qualifiedName(), player);
         }
         if (expression instanceof Expression.Call call) {
-            return callValue(call, minecraft, player);
+            return callValue(call, quest, minecraft, player);
         }
         return new Value.UnknownValue("Unsupported expression node.");
     }
 
     private Value logicalValue(
             Expression.Logical logical,
+            QuestDefinition quest,
             Minecraft minecraft,
             LocalPlayer player
     ) {
-        Value left = valueOf(logical.left(), minecraft, player);
+        Value left = valueOf(logical.left(), quest, minecraft, player);
         if (!(left instanceof Value.BooleanValue leftBoolean)) {
             return unknownFrom(left, "Logical operator requires booleans.");
         }
@@ -87,7 +92,7 @@ public final class QuestConditionEvaluator {
             return new Value.BooleanValue(true);
         }
 
-        Value right = valueOf(logical.right(), minecraft, player);
+        Value right = valueOf(logical.right(), quest, minecraft, player);
         if (!(right instanceof Value.BooleanValue rightBoolean)) {
             return unknownFrom(right, "Logical operator requires booleans.");
         }
@@ -120,9 +125,14 @@ public final class QuestConditionEvaluator {
         };
     }
 
-    private Value callValue(Expression.Call call, Minecraft minecraft, LocalPlayer player) {
+    private Value callValue(
+            Expression.Call call,
+            QuestDefinition quest,
+            Minecraft minecraft,
+            LocalPlayer player
+    ) {
         List<Value> arguments = call.arguments().stream()
-                .map(argument -> valueOf(argument, minecraft, player))
+                .map(argument -> valueOf(argument, quest, minecraft, player))
                 .toList();
         for (Value argument : arguments) {
             if (argument instanceof Value.UnknownValue unknown) {
@@ -130,7 +140,8 @@ public final class QuestConditionEvaluator {
             }
         }
 
-        return switch (call.qualifiedName()) {
+        String functionName = call.qualifiedName();
+        return switch (functionName) {
             case "inventory.count" -> inventoryCount(player, stringArgument(arguments, 0));
             case "inventory.has" -> booleanFromNumber(
                     inventoryCount(player, stringArgument(arguments, 0)),
@@ -138,29 +149,22 @@ public final class QuestConditionEvaluator {
             );
             case "inventory.equipped" -> equipped(player, stringArgument(arguments, 0));
             case "inventory.durability" -> durability(player, stringArgument(arguments, 0));
-            case "stat.mined" -> blockStat(player, stringArgument(arguments, 0));
-            case "stat.used" -> itemStat(player, stringArgument(arguments, 0), StatKind.USED);
-            case "stat.crafted" -> itemStat(player, stringArgument(arguments, 0), StatKind.CRAFTED);
-            case "stat.picked_up" -> itemStat(
-                    player,
-                    stringArgument(arguments, 0),
-                    StatKind.PICKED_UP
-            );
-            case "stat.dropped" -> itemStat(
-                    player,
-                    stringArgument(arguments, 0),
-                    StatKind.DROPPED
-            );
-            case "stat.killed" -> entityStat(player, stringArgument(arguments, 0));
+            case "stat.mined", "stat.used", "stat.crafted", "stat.killed",
+                    "stat.picked_up", "stat.dropped" -> statisticValue(
+                            player,
+                            quest,
+                            functionName,
+                            stringArgument(arguments, 0)
+                    );
             case "distance.to" -> distanceTo(player, arguments);
             case "inside.box" -> insideBox(player, arguments);
             case "inside.radius" -> insideRadius(player, arguments);
             case "quest.active" -> questActive(stringArgument(arguments, 0));
             case "quest.done", "advancement.done" -> new Value.UnknownValue(
-                    "Runtime function is not implemented yet: " + call.qualifiedName()
+                    "Runtime function is not implemented yet: " + functionName
             );
             default -> new Value.UnknownValue(
-                    "Runtime function is not implemented: " + call.qualifiedName()
+                    "Runtime function is not implemented: " + functionName
             );
         };
     }
@@ -200,46 +204,24 @@ public final class QuestConditionEvaluator {
         return new Value.NumberValue(0);
     }
 
-    private Value blockStat(LocalPlayer player, String idText) {
-        Identifier id = Identifier.tryParse(idText);
-        if (id == null) {
-            return new Value.UnknownValue("Invalid block ID: " + idText);
+    private Value statisticValue(
+            LocalPlayer player,
+            QuestDefinition quest,
+            String functionName,
+            String targetId
+    ) {
+        StatReference reference = new StatReference(functionName, targetId);
+        var current = QuestStatisticAccess.read(player, reference);
+        if (current.isEmpty()) {
+            return new Value.UnknownValue(
+                    "Unknown statistic target for " + functionName + ": " + targetId
+            );
         }
-        Optional<Block> block = BuiltInRegistries.BLOCK.getOptional(id);
-        if (block.isEmpty()) {
-            return new Value.UnknownValue("Unknown block ID: " + idText);
-        }
-        return new Value.NumberValue(
-                player.getStats().getValue(Stats.BLOCK_MINED.get(block.get()))
-        );
-    }
-
-    private Value itemStat(LocalPlayer player, String idText, StatKind kind) {
-        Optional<Item> item = item(idText);
-        if (item.isEmpty()) {
-            return new Value.UnknownValue("Unknown item ID: " + idText);
-        }
-        int value = switch (kind) {
-            case USED -> player.getStats().getValue(Stats.ITEM_USED.get(item.get()));
-            case CRAFTED -> player.getStats().getValue(Stats.ITEM_CRAFTED.get(item.get()));
-            case PICKED_UP -> player.getStats().getValue(Stats.ITEM_PICKED_UP.get(item.get()));
-            case DROPPED -> player.getStats().getValue(Stats.ITEM_DROPPED.get(item.get()));
-        };
-        return new Value.NumberValue(value);
-    }
-
-    private Value entityStat(LocalPlayer player, String idText) {
-        Identifier id = Identifier.tryParse(idText);
-        if (id == null) {
-            return new Value.UnknownValue("Invalid entity ID: " + idText);
-        }
-        Optional<EntityType<?>> entity = BuiltInRegistries.ENTITY_TYPE.getOptional(id);
-        if (entity.isEmpty()) {
-            return new Value.UnknownValue("Unknown entity ID: " + idText);
-        }
-        return new Value.NumberValue(
-                player.getStats().getValue(Stats.ENTITY_KILLED.get(entity.get()))
-        );
+        return new Value.NumberValue(ClientQuestStore.statisticDelta(
+                quest,
+                reference,
+                current.getAsLong()
+        ));
     }
 
     private Value distanceTo(LocalPlayer player, List<Value> arguments) {
@@ -357,13 +339,6 @@ public final class QuestConditionEvaluator {
     private boolean between(double value, double endpointA, double endpointB) {
         return value >= Math.min(endpointA, endpointB)
                 && value <= Math.max(endpointA, endpointB);
-    }
-
-    private enum StatKind {
-        USED,
-        CRAFTED,
-        PICKED_UP,
-        DROPPED
     }
 
     @FunctionalInterface
