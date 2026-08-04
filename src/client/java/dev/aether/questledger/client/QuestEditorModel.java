@@ -1,6 +1,6 @@
 package dev.aether.questledger.client;
 
-import dev.aether.questledger.questscript.QuestScriptFormatter;
+import dev.aether.questledger.questscript.QuestScriptUserFormatter;
 import dev.aether.questledger.questscript.SourceLocation;
 import dev.aether.questledger.questscript.ast.ComparisonOperator;
 import dev.aether.questledger.questscript.ast.Expression;
@@ -189,7 +189,7 @@ public final class QuestEditorModel {
 
     public String toCanonicalSource() {
         QuestDefinition quest = toQuestDefinition();
-        return new QuestScriptFormatter().format(new QuestFile(List.of(quest)));
+        return new QuestScriptUserFormatter().format(new QuestFile(List.of(quest)));
     }
 
     public QuestDefinition toQuestDefinition() {
@@ -249,7 +249,7 @@ public final class QuestEditorModel {
             this.operator = Operator.EQUAL;
             this.animation = quest.animation().map(Animation::fromId).orElse(Animation.WAX_SEAL);
             this.hudVisible = quest.hudVisible();
-            this.codeSource = new QuestScriptFormatter().format(new QuestFile(List.of(quest)));
+            this.codeSource = new QuestScriptUserFormatter().format(new QuestFile(List.of(quest)));
             return true;
         }
 
@@ -273,7 +273,7 @@ public final class QuestEditorModel {
         this.operator = importedOperator.get();
         this.animation = quest.animation().map(Animation::fromId).orElse(Animation.WAX_SEAL);
         this.hudVisible = quest.hudVisible();
-        this.codeSource = new QuestScriptFormatter().format(new QuestFile(List.of(quest)));
+        this.codeSource = new QuestScriptUserFormatter().format(new QuestFile(List.of(quest)));
         return true;
     }
 
