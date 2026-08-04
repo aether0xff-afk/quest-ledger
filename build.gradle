@@ -68,11 +68,23 @@ tasks.register('transactionalStoreSelfTest', JavaExec) {
     mainClass = 'dev.aether.questledger.storage.TransactionalFilePairSelfTest'
 }
 
+tasks.register('uiLayoutSelfTest', JavaExec) {
+    group = 'verification'
+    description = 'Runs responsive layout and text-overflow regression tests.'
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.aether.questledger.ui.QuestLedgerUiLayoutSelfTest'
+}
+
 tasks.named('test') {
     failOnNoDiscoveredTests = false
 }
 
-check.dependsOn tasks.named('questScriptSelfTest'), tasks.named('transactionalStoreSelfTest')
+check.dependsOn(
+        tasks.named('questScriptSelfTest'),
+        tasks.named('transactionalStoreSelfTest'),
+        tasks.named('uiLayoutSelfTest')
+)
 
 publishing {
     publications {
