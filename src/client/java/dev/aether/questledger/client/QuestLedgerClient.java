@@ -19,8 +19,6 @@ public final class QuestLedgerClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        ClientQuestStore.load();
-
         this.openLedger = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.questledger.open",
                 InputConstants.Type.KEYSYM,
@@ -29,10 +27,12 @@ public final class QuestLedgerClient implements ClientModInitializer {
         ));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (this.openLedger.consumeClick()) {
-                client.gui.setScreen(new QuestLedgerScreen(null));
-            }
             QuestCompletionController.tick(client);
+            while (this.openLedger.consumeClick()) {
+                if (ClientQuestStore.activeScope().isPresent()) {
+                    client.gui.setScreen(new QuestLedgerScreen(null));
+                }
+            }
         });
 
         HudElementRegistry.attachElementBefore(
@@ -42,7 +42,8 @@ public final class QuestLedgerClient implements ClientModInitializer {
         );
 
         QuestLedger.LOGGER.info(
-                "Quest Ledger client initialized with backend-neutral Blaze3D GUI rendering."
+                "Quest Ledger client initialized with scoped storage and "
+                        + "backend-neutral Blaze3D GUI rendering."
         );
     }
 }
