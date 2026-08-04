@@ -1,4 +1,4 @@
-# QuestScript v0.1
+# QuestScript v0.2
 
 QuestScript is a small declarative language for Quest Ledger completion conditions.
 
@@ -17,8 +17,6 @@ quest "네더 탐험 준비" {
     )
   }
 
-  hold 2s
-  remove after 1200ms
   animation "wax_seal"
   hud show
 }
@@ -26,15 +24,54 @@ quest "네더 탐험 준비" {
 
 ## Quest fields
 
-- `id "identifier"` — optional stable internal ID.
+- `id "identifier"` — optional stable internal ID. IDs are strongly recommended for manual and linked quests.
 - `description "text"` — optional description.
 - `complete when { expression }` — required completion expression.
-- `hold 2s` — condition must remain true for the duration.
-- `remove after 1200ms` — HUD removal delay after completion.
-- `animation "wax_seal"` — completion animation.
+- `animation "wax_seal"` — optional completion animation.
 - `hud show` or `hud hide` — whether to pin the quest to the HUD.
 
-Supported duration units are `ms`, `s`, `m`, and `h`.
+QuestScript has no user-configurable completion timer. The expression is checked every five client ticks and completion begins immediately when it becomes true. A short fixed visual effect plays before the quest disappears.
+
+Older files may contain `hold` or `remove after`. Those legacy fields remain readable for compatibility but are ignored by the runtime and omitted by the editor.
+
+## Automatic, manual, and hybrid quests
+
+### Automatic
+
+```questscript
+quest "위더 처치" {
+  complete when {
+    stat.killed("minecraft:wither") >= 1
+  }
+}
+```
+
+### Manual
+
+```questscript
+quest "금 공장 완성" {
+  complete when {
+    manual.checked == true
+  }
+}
+```
+
+Open the Active Quests screen and press **Confirm Complete**.
+
+### Hybrid
+
+```questscript
+quest "금 공장 가동 확인" {
+  complete when {
+    manual.checked == true
+    and inventory.count("minecraft:gold_ingot") >= 64
+  }
+}
+```
+
+Manual confirmation changes only `manual.checked`; all other conditions still have to be satisfied.
+
+See [`QUEST_TYPES.md`](QUEST_TYPES.md) for detailed examples.
 
 ## Operators
 
@@ -89,11 +126,13 @@ world.is_night
 manual.checked
 ```
 
+`manual.checked` is implemented. Biome, game mode, weather, difficulty, and World Clock properties are currently validation-only and evaluate as unknown at runtime.
+
 ## Functions
 
 ```questscript
 inventory.count("minecraft:diamond")
-inventory.has("#minecraft:logs")
+inventory.has("minecraft:diamond")
 inventory.equipped("minecraft:elytra")
 inventory.durability("minecraft:diamond_pickaxe")
 
@@ -113,7 +152,27 @@ inside.box(0, 60, 0, 32, 90, 32)
 inside.radius(0, 64, 0, 16)
 ```
 
-Functions and properties not listed here are rejected. Minecraft registry values should use namespaced IDs such as `minecraft:diamond`; tags begin with `#`.
+Functions and properties not listed here are rejected. Minecraft registry values should use namespaced IDs such as `minecraft:diamond`.
+
+Item tags beginning with `#` are accepted by the parser but are not yet evaluated automatically. Use exact resource IDs in active quests.
+
+`advancement.done` and `quest.done` are validation-only in the current runtime. `quest.active` is implemented.
+
+## Statistic versus inventory semantics
+
+Statistic functions measure actions **after the quest was created**:
+
+```questscript
+stat.mined("minecraft:ancient_debris") >= 100
+```
+
+Inventory functions inspect the current inventory:
+
+```questscript
+inventory.count("minecraft:netherite_ingot") >= 100
+```
+
+Netherite ingots are items, not mined blocks. To express “mine netherite,” choose the actual block being mined, usually `minecraft:ancient_debris`. To express “obtain 100 netherite ingots,” use current inventory count or a suitable crafting/action statistic according to the intended goal.
 
 ## Supported animations
 
