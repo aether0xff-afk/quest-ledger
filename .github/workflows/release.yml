@@ -1,0 +1,108 @@
+name: release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - gradle.properties
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quest-ledger-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+
+      - name: Build and test release
+        run: gradle build --stacktrace
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(sed -n 's/^mod_version=//p' gradle.properties | head -n 1 | tr -d '\r')"
+          if [[ -z "$VERSION" ]]; then
+            echo "mod_version is missing from gradle.properties" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Locate installable JAR
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t JARS < <(find build/libs -maxdepth 1 -type f -name '*.jar' \
+            ! -name '*-sources.jar' ! -name '*-dev.jar' | sort)
+          if [[ "${#JARS[@]}" -ne 1 ]]; then
+            printf 'Expected exactly one installable JAR, found %s:\n' "${#JARS[@]}" >&2
+            printf '  %s\n' "${JARS[@]:-<none>}" >&2
+            exit 1
+          fi
+          JAR="${JARS[0]}"
+          CHECKSUM="${JAR}.sha256"
+          (
+            cd "$(dirname "$JAR")"
+            sha256sum "$(basename "$JAR")" > "$(basename "$CHECKSUM")"
+          )
+          echo "jar=$JAR" >> "$GITHUB_OUTPUT"
+          echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag safety
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if git show-ref --tags --verify --quiet "refs/tags/$TAG"; then
+            TAG_SHA="$(git rev-list -n 1 "refs/tags/$TAG")"
+            if [[ "$TAG_SHA" != "$GITHUB_SHA" ]]; then
+              echo "$TAG already points to $TAG_SHA, not this commit $GITHUB_SHA." >&2
+              echo "Bump mod_version before publishing another release." >&2
+              exit 1
+            fi
+          fi
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          JAR: ${{ steps.artifact.outputs.jar }}
+          CHECKSUM: ${{ steps.artifact.outputs.checksum }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "Quest Ledger $TAG" \
+              --notes-file RELEASE_NOTES.md
+            gh release upload "$TAG" "$JAR" "$CHECKSUM" --clobber
+          else
+            gh release create "$TAG" "$JAR" "$CHECKSUM" \
+              --target "$GITHUB_SHA" \
+              --title "Quest Ledger $TAG" \
+              --notes-file RELEASE_NOTES.md \
+              --latest
+          fi
