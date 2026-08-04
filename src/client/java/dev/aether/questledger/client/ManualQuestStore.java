@@ -58,7 +58,7 @@ public final class ManualQuestStore {
         statePath = SCOPES_DIRECTORY.resolve(scope.directoryName())
                 .resolve("manual-state.properties");
         load();
-        pruneToActiveQuests();
+        migrateAndPruneToActiveQuests();
         return true;
     }
 
@@ -122,16 +122,20 @@ public final class ManualQuestStore {
         }
     }
 
-    private static void pruneToActiveQuests() {
+    private static void migrateAndPruneToActiveQuests() {
         if (checkedKeys.isEmpty()) {
             return;
         }
-        Set<String> active = new HashSet<>();
+
+        Set<String> updated = new HashSet<>();
         for (QuestDefinition quest : ClientQuestStore.snapshot().quests()) {
-            active.add(questKey(quest));
+            String currentKey = questKey(quest);
+            if (checkedKeys.contains(currentKey) || checkedKeys.contains(legacyQuestKey(quest))) {
+                updated.add(currentKey);
+            }
         }
-        Set<String> updated = new HashSet<>(checkedKeys);
-        if (updated.retainAll(active)) {
+
+        if (!updated.equals(checkedKeys)) {
             checkedKeys = Set.copyOf(updated);
             persist();
         }
@@ -142,7 +146,7 @@ public final class ManualQuestStore {
             return;
         }
         Properties properties = new Properties();
-        properties.setProperty("version", "1");
+        properties.setProperty("version", "2");
         for (String key : checkedKeys) {
             properties.setProperty("checked." + encode(key), "true");
         }
@@ -157,6 +161,10 @@ public final class ManualQuestStore {
     }
 
     private static String questKey(QuestDefinition quest) {
+        return ClientQuestStore.runtimeKey(quest);
+    }
+
+    private static String legacyQuestKey(QuestDefinition quest) {
         if (quest.id().isPresent()) {
             return "id:" + quest.id().get();
         }

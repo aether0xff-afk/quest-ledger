@@ -8,6 +8,7 @@ import dev.aether.questledger.questscript.QuestScriptFormatter;
 import dev.aether.questledger.questscript.ast.QuestDefinition;
 import dev.aether.questledger.questscript.ast.QuestFile;
 import dev.aether.questledger.questscript.validation.Diagnostic;
+import dev.aether.questledger.storage.TransactionalFilePair;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -35,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.UUID;
 
 public final class ClientQuestStore {
     private static final Path BASE_DIRECTORY = FabricLoader.getInstance().getConfigDir()
@@ -88,9 +90,12 @@ public final class ClientQuestStore {
         try {
             Files.createDirectories(storeDirectory);
             migrateLegacyStore(scope);
+            TransactionalFilePair.recover(storePath, runtimePath);
             writeScopeMetadata(scope);
         } catch (IOException exception) {
             QuestLedger.LOGGER.error("Could not prepare Quest Ledger scope", exception);
+            unload();
+            return;
         }
 
         QuestFile loadedFile = new QuestFile(List.of());
@@ -235,15 +240,29 @@ public final class ClientQuestStore {
         return currentValue - baseline;
     }
 
+    static synchronized String runtimeKey(QuestDefinition quest) {
+        int index = questIndex(quest);
+        if (index >= 0 && index < runtimeEntries.size()) {
+            return "runtime:" + runtimeEntries.get(index).instanceId();
+        }
+        return quest.id().map(id -> "id:" + id)
+                .orElseGet(() -> "unresolved:" + fingerprint(quest));
+    }
+
     private static SaveResult persist(QuestFile file, List<RuntimeEntry> entries) {
         String canonical = new QuestScriptFormatter().format(file);
+        List<RuntimeEntry> committedEntries = List.copyOf(entries);
         try {
             Files.createDirectories(storeDirectory);
-            writeAtomically(storePath, canonical);
+            TransactionalFilePair.commit(
+                    storePath,
+                    canonical,
+                    runtimePath,
+                    runtimeSource(committedEntries)
+            );
             cached = file;
             source = canonical;
-            runtimeEntries = List.copyOf(entries);
-            persistRuntimeOnlyOrThrow();
+            runtimeEntries = committedEntries;
             changedAtMillis = Util.getMillis();
             return new SaveResult(true, "Saved " + file.quests().size() + " quest(s).");
         } catch (IOException exception) {
@@ -297,6 +316,7 @@ public final class ClientQuestStore {
             }
         }
         return new RuntimeEntry(
+                UUID.randomUUID().toString(),
                 fingerprint(quest),
                 Instant.now().toEpochMilli(),
                 baselines
@@ -329,6 +349,10 @@ public final class ClientQuestStore {
             List<RuntimeEntry> entries = new ArrayList<>();
             for (int index = 0; index < count; index++) {
                 String prefix = "entry." + index + ".";
+                String instanceId = properties.getProperty(prefix + "instance_id", "");
+                if (instanceId.isBlank()) {
+                    instanceId = UUID.randomUUID().toString();
+                }
                 String fingerprint = properties.getProperty(prefix + "fingerprint", "");
                 long createdAt = Long.parseLong(
                         properties.getProperty(prefix + "created_at", "0")
@@ -346,7 +370,7 @@ public final class ClientQuestStore {
                             ));
                 }
                 if (!fingerprint.isBlank()) {
-                    entries.add(new RuntimeEntry(fingerprint, createdAt, baselines));
+                    entries.add(new RuntimeEntry(instanceId, fingerprint, createdAt, baselines));
                 }
             }
             return List.copyOf(entries);
@@ -368,12 +392,17 @@ public final class ClientQuestStore {
         if (runtimePath == null) {
             return;
         }
+        writeAtomically(runtimePath, runtimeSource(runtimeEntries));
+    }
+
+    private static String runtimeSource(List<RuntimeEntry> entries) throws IOException {
         Properties properties = new Properties();
-        properties.setProperty("version", "1");
-        properties.setProperty("entry.count", Integer.toString(runtimeEntries.size()));
-        for (int index = 0; index < runtimeEntries.size(); index++) {
-            RuntimeEntry entry = runtimeEntries.get(index);
+        properties.setProperty("version", "2");
+        properties.setProperty("entry.count", Integer.toString(entries.size()));
+        for (int index = 0; index < entries.size(); index++) {
+            RuntimeEntry entry = entries.get(index);
             String prefix = "entry." + index + ".";
+            properties.setProperty(prefix + "instance_id", entry.instanceId());
             properties.setProperty(prefix + "fingerprint", entry.fingerprint());
             properties.setProperty(prefix + "created_at", Long.toString(entry.createdAtMillis()));
             for (Map.Entry<StatReference, Long> baseline : entry.baselines().entrySet()) {
@@ -385,7 +414,7 @@ public final class ClientQuestStore {
         }
         StringWriter writer = new StringWriter();
         properties.store(writer, "Quest Ledger per-quest runtime state");
-        writeAtomically(runtimePath, writer.toString());
+        return writer.toString();
     }
 
     private static String encodeReference(StatReference reference) {
@@ -545,16 +574,20 @@ public final class ClientQuestStore {
     }
 
     private record RuntimeEntry(
+            String instanceId,
             String fingerprint,
             long createdAtMillis,
             Map<StatReference, Long> baselines
     ) {
         private RuntimeEntry {
+            instanceId = instanceId == null || instanceId.isBlank()
+                    ? UUID.randomUUID().toString()
+                    : instanceId;
             baselines = Map.copyOf(baselines);
         }
 
         private RuntimeEntry withBaselines(Map<StatReference, Long> updated) {
-            return new RuntimeEntry(fingerprint, createdAtMillis, updated);
+            return new RuntimeEntry(instanceId, fingerprint, createdAtMillis, updated);
         }
     }
 
