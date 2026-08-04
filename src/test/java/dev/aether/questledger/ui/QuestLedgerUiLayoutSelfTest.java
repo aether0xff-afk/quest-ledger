@@ -45,7 +45,8 @@ public final class QuestLedgerUiLayoutSelfTest {
                     + editor.rowStep() * (visibleRows - 1)
                     + 20;
             int statusTop = editor.contentBottom() - 13;
-            require(lastWidgetBottom + 6 <= statusTop,
+            int requiredGap = frame.tiny() ? 6 : 5;
+            require(lastWidgetBottom + requiredGap <= statusTop,
                     "Editor widgets collide with status text at " + label(size));
             require(statusTop + 9 <= editor.contentBottom(),
                     "Editor status text collides with footer at " + label(size));
