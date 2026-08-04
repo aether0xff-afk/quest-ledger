@@ -8,6 +8,9 @@ import dev.aether.questledger.questscript.QuestScriptFormatter;
 import dev.aether.questledger.questscript.ast.QuestDefinition;
 import dev.aether.questledger.questscript.ast.QuestFile;
 import dev.aether.questledger.questscript.validation.Diagnostic;
+import dev.aether.questledger.questscript.validation.QuestRuntimeSupportValidator;
+import dev.aether.questledger.questscript.validation.QuestScriptValidator;
+import dev.aether.questledger.questscript.validation.ValidationResult;
 import dev.aether.questledger.storage.TransactionalFilePair;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
@@ -161,13 +164,18 @@ public final class ClientQuestStore {
 
             List<QuestDefinition> merged = new ArrayList<>(cached.quests());
             merged.addAll(parsed.file().quests());
+            QuestFile mergedFile = new QuestFile(merged);
+            Optional<SaveResult> validationFailure = validateForSave(mergedFile);
+            if (validationFailure.isPresent()) {
+                return validationFailure.get();
+            }
 
             List<RuntimeEntry> mergedRuntime = new ArrayList<>(runtimeEntries);
             LocalPlayer player = Minecraft.getInstance().player;
             for (QuestDefinition quest : parsed.file().quests()) {
                 mergedRuntime.add(captureRuntimeEntry(quest, player));
             }
-            return persist(new QuestFile(merged), mergedRuntime);
+            return persist(mergedFile, mergedRuntime);
         } catch (QuestScriptException exception) {
             return new SaveResult(false, exception.getMessage());
         }
@@ -182,6 +190,10 @@ public final class ClientQuestStore {
             QuestScript.ParsedQuestScript parsed = QuestScript.parseAndValidate(completeSource);
             if (!parsed.validation().valid()) {
                 return invalidResult(parsed.validation().diagnostics().getFirst());
+            }
+            Optional<SaveResult> validationFailure = validateForSave(parsed.file());
+            if (validationFailure.isPresent()) {
+                return validationFailure.get();
             }
             List<RuntimeEntry> reconciled = reconcileRuntime(
                     parsed.file(),
@@ -549,6 +561,18 @@ public final class ClientQuestStore {
                 .replace("\t", "\\t")
                 .replace("\r", "\\r")
                 .replace("\n", "\\n");
+    }
+
+    private static Optional<SaveResult> validateForSave(QuestFile file) {
+        ValidationResult semantic = new QuestScriptValidator().validate(file);
+        if (!semantic.valid()) {
+            return Optional.of(invalidResult(semantic.diagnostics().getFirst()));
+        }
+        ValidationResult runtime = new QuestRuntimeSupportValidator().validate(file);
+        if (!runtime.valid()) {
+            return Optional.of(invalidResult(runtime.diagnostics().getFirst()));
+        }
+        return Optional.empty();
     }
 
     private static SaveResult invalidResult(Diagnostic diagnostic) {
