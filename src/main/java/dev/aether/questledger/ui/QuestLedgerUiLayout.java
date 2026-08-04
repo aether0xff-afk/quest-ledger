@@ -58,7 +58,7 @@ public final class QuestLedgerUiLayout {
         int contentTop = frame.top() + headerHeight;
         int contentBottom = frame.bottom() - footerHeight;
         int available = Math.max(80, contentBottom - contentTop);
-        int perPage = clamp(available / 50, 2, 6);
+        int perPage = clamp(available / 42, 2, 6);
         int gap = frame.tiny() ? 4 : 6;
         int cardHeight = Math.max(36, (available - Math.max(0, perPage - 1) * gap) / perPage);
         return new ListLayout(padding, headerHeight, footerHeight, contentTop, contentBottom,
