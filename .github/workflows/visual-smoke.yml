@@ -1,0 +1,111 @@
+name: visual-smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  screenshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+      - name: Install virtual display and software rendering
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb openbox xdotool imagemagick \
+            mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libasound2t64
+      - name: Launch Minecraft 26.2 and capture Quest Ledger
+        env:
+          QUEST_LEDGER_VISUAL_SMOKE_TEST: '1'
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          MESA_LOADER_DRIVER_OVERRIDE: llvmpipe
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+        run: |
+          set -euo pipefail
+          mkdir -p run visual-output
+          cat > run/options.txt <<'EOF'
+          lang:ko_kr
+          fullscreen:false
+          guiScale:2
+          EOF
+
+          Xvfb :99 -screen 0 1280x720x24 -ac +extension GLX +render -noreset \
+            >visual-output/xvfb.log 2>&1 &
+          export DISPLAY=:99
+          sleep 2
+          openbox >visual-output/openbox.log 2>&1 &
+
+          gradle runClient --no-daemon --stacktrace \
+            >visual-output/client.log 2>&1 &
+          GAME_PID=$!
+
+          capture() {
+            local marker="$1"
+            local output="$2"
+            local found=''
+            for _ in $(seq 1 240); do
+              if [ -f "$marker" ]; then
+                found="$marker"
+                break
+              fi
+              if [ -f "run/$marker" ]; then
+                found="run/$marker"
+                break
+              fi
+              if ! kill -0 "$GAME_PID" 2>/dev/null; then
+                echo 'Minecraft exited before the screenshot marker appeared.'
+                tail -n 200 visual-output/client.log || true
+                exit 1
+              fi
+              sleep 1
+            done
+
+            if [ -z "$found" ]; then
+              echo "Timed out waiting for $marker"
+              tail -n 200 visual-output/client.log || true
+              exit 1
+            fi
+
+            local window=''
+            for _ in $(seq 1 30); do
+              window=$(xdotool search --onlyvisible --name 'Minecraft' 2>/dev/null | tail -n 1 || true)
+              [ -n "$window" ] && break
+              sleep 1
+            done
+            if [ -z "$window" ]; then
+              echo 'Could not locate the Minecraft window.'
+              xdotool search --onlyvisible --name '.*' getwindowname %@ 2>/dev/null || true
+              exit 1
+            fi
+
+            xdotool windowactivate --sync "$window" || true
+            sleep 2
+            import -display :99 -window "$window" "visual-output/$output"
+            identify "visual-output/$output"
+          }
+
+          capture quest-ledger-builder-ready quest-ledger-builder.png
+          capture quest-ledger-types-ready quest-ledger-types.png
+
+          wait "$GAME_PID" || {
+            tail -n 200 visual-output/client.log || true
+            exit 1
+          }
+      - name: Upload real Minecraft screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quest-ledger-visual-smoke
+          path: visual-output/
