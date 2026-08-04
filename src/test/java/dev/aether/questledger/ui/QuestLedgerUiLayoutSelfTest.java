@@ -37,12 +37,20 @@ public final class QuestLedgerUiLayoutSelfTest {
                     "Editor field ends outside frame at " + label(size));
             require(editor.contentTop() < editor.contentBottom(), "Editor content collapsed");
             require(editor.rowStep() >= 22, "Editor row became unusably short");
-            require(editor.contentTop() + editor.rowStep() * 5 + 20 <= frame.bottom(),
-                    "Last editor widget escaped frame at " + label(size));
+            int visibleRows = frame.tiny() ? 5 : 6;
+            int lastWidgetBottom = editor.contentTop()
+                    + editor.rowStep() * (visibleRows - 1)
+                    + 20;
+            require(lastWidgetBottom + 15 <= editor.contentBottom(),
+                    "Editor widgets collide with status area at " + label(size));
 
             QuestLedgerUiLayout.ListLayout list = QuestLedgerUiLayout.list(frame);
             require(list.questsPerPage() >= 2 && list.questsPerPage() <= 6,
                     "Unexpected quest page size");
+            if (frame.tiny()) {
+                require(list.questsPerPage() >= 3,
+                        "Compact list wastes space at " + label(size));
+            }
             int used = list.questsPerPage() * list.cardHeight()
                     + (list.questsPerPage() - 1) * list.gap();
             require(used <= list.contentBottom() - list.contentTop(),
