@@ -2,7 +2,7 @@ package dev.aether.questledger.client;
 
 import dev.aether.questledger.questscript.QuestScript;
 import dev.aether.questledger.questscript.QuestScriptException;
-import dev.aether.questledger.questscript.QuestScriptFormatter;
+import dev.aether.questledger.questscript.QuestScriptUserFormatter;
 import dev.aether.questledger.questscript.ast.QuestDefinition;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
@@ -295,7 +295,7 @@ public final class QuestLedgerScreen extends Screen {
             result = ClientQuestStore.append(this.model.codeSource());
             if (result.success()) {
                 try {
-                    this.model.codeSource(new QuestScriptFormatter().format(
+                    this.model.codeSource(new QuestScriptUserFormatter().format(
                             QuestScript.parse(this.model.codeSource())
                     ));
                 } catch (QuestScriptException ignored) {
