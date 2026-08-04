@@ -147,9 +147,9 @@ public final class ManualQuestStore {
             properties.setProperty("checked." + encode(key), "true");
         }
 
-        StringWriter writer = new StringWriter();
-        properties.store(writer, "Quest Ledger manual completion confirmations");
         try {
+            StringWriter writer = new StringWriter();
+            properties.store(writer, "Quest Ledger manual completion confirmations");
             writeAtomically(statePath, writer.toString());
         } catch (IOException exception) {
             QuestLedger.LOGGER.error("Could not save manual quest state", exception);
