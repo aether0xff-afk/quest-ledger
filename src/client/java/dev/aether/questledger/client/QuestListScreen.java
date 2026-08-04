@@ -1,82 +1,114 @@
 package dev.aether.questledger.client;
 
 import dev.aether.questledger.questscript.ast.QuestDefinition;
+import dev.aether.questledger.ui.QuestLedgerUiLayout;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public final class QuestListScreen extends Screen {
-    private static final int QUESTS_PER_PAGE = 6;
-    private static final int PANEL_COLOR = 0xFFF0D9A4;
-    private static final int PANEL_DARK = 0xFF5B3A24;
-    private static final int PANEL_MID = 0xFF9A6A3B;
-    private static final int INK = 0xFF2B1A12;
-    private static final int MUTED_INK = 0xFF6F5139;
-
     private final Screen parent;
     private final int requestedPage;
+    private final List<QuestDefinition> previewQuests;
+    private final List<Button> styledButtons = new ArrayList<>();
 
+    private QuestLedgerUiLayout.Frame frame;
+    private QuestLedgerUiLayout.ListLayout layout;
     private int page;
     private int pageCount;
-    private int panelLeft;
-    private int panelTop;
-    private int panelWidth;
-    private int panelHeight;
+    private int actionWidth;
 
     public QuestListScreen(Screen parent) {
-        this(parent, 0);
+        this(parent, 0, null);
     }
 
-    private QuestListScreen(Screen parent, int page) {
+    private QuestListScreen(Screen parent, int page, List<QuestDefinition> previewQuests) {
         super(Component.translatable("screen.questledger.list.title"));
         this.parent = parent;
         this.requestedPage = page;
+        this.previewQuests = previewQuests;
+    }
+
+    static QuestListScreen preview(Screen parent, List<QuestDefinition> quests) {
+        return new QuestListScreen(parent, 0, List.copyOf(quests));
     }
 
     @Override
     protected void init() {
-        this.panelWidth = Math.min(600, Math.max(320, this.width - 32));
-        this.panelHeight = Math.min(380, Math.max(260, this.height - 32));
-        this.panelLeft = (this.width - this.panelWidth) / 2;
-        this.panelTop = (this.height - this.panelHeight) / 2;
+        this.styledButtons.clear();
+        this.frame = QuestLedgerUiLayout.frame(this.width, this.height);
+        this.layout = QuestLedgerUiLayout.list(this.frame);
+        this.actionWidth = QuestLedgerUiLayout.buttonWidth(
+                this.font::width,
+                Component.translatable("screen.questledger.list.confirm").getString(),
+                84,
+                126
+        );
 
-        List<QuestDefinition> quests = ClientQuestStore.snapshot().quests();
-        this.pageCount = Math.max(1, (quests.size() + QUESTS_PER_PAGE - 1) / QUESTS_PER_PAGE);
+        List<QuestDefinition> quests = quests();
+        this.pageCount = Math.max(
+                1,
+                (quests.size() + this.layout.questsPerPage() - 1) / this.layout.questsPerPage()
+        );
         this.page = Math.max(0, Math.min(this.requestedPage, this.pageCount - 1));
 
-        int firstIndex = this.page * QUESTS_PER_PAGE;
-        int lastIndex = Math.min(quests.size(), firstIndex + QUESTS_PER_PAGE);
+        int firstIndex = this.page * this.layout.questsPerPage();
+        int lastIndex = Math.min(quests.size(), firstIndex + this.layout.questsPerPage());
         for (int index = firstIndex; index < lastIndex; index++) {
             addQuestButton(quests.get(index), index - firstIndex);
         }
 
-        int footerY = this.panelTop + this.panelHeight - 31;
-        this.addRenderableWidget(Button.builder(
+        addFooterButtons();
+    }
+
+    private void addFooterButtons() {
+        int y = this.frame.bottom() - 31;
+        int x = this.frame.left() + this.layout.padding();
+        int gap = 5;
+
+        Button previous = addButton(Button.builder(
                 Component.literal("‹"),
-                button -> show(new QuestListScreen(this.parent, this.page - 1))
-        ).bounds(this.panelLeft + 20, footerY, 28, 20).build()).active = this.page > 0;
+                button -> show(new QuestListScreen(this.parent, this.page - 1, this.previewQuests))
+        ).bounds(x, y, 28, 20).build());
+        previous.active = this.page > 0;
 
-        this.addRenderableWidget(Button.builder(
+        Button next = addButton(Button.builder(
                 Component.literal("›"),
-                button -> show(new QuestListScreen(this.parent, this.page + 1))
-        ).bounds(this.panelLeft + 54, footerY, 28, 20).build()).active = this.page + 1 < this.pageCount;
+                button -> show(new QuestListScreen(this.parent, this.page + 1, this.previewQuests))
+        ).bounds(x + 28 + gap, y, 28, 20).build());
+        next.active = this.page + 1 < this.pageCount;
 
-        this.addRenderableWidget(Button.builder(
+        int backWidth = QuestLedgerUiLayout.buttonWidth(
+                this.font::width,
+                Component.translatable("screen.questledger.back").getString(),
+                68,
+                100
+        );
+        int typesWidth = QuestLedgerUiLayout.buttonWidth(
+                this.font::width,
+                Component.translatable("screen.questledger.types.button").getString(),
+                84,
+                126
+        );
+        int right = this.frame.right() - this.layout.padding();
+
+        addButton(Button.builder(
                 Component.translatable("screen.questledger.types.button"),
                 button -> show(new QuestTypesScreen(this))
-        ).bounds(this.panelLeft + 94, footerY, 112, 20).build());
+        ).bounds(right - backWidth - gap - typesWidth, y, typesWidth, 20).build());
 
-        this.addRenderableWidget(Button.builder(
+        addButton(Button.builder(
                 Component.translatable("screen.questledger.back"),
                 button -> onClose()
-        ).bounds(this.panelLeft + this.panelWidth - 112, footerY, 92, 20).build());
+        ).bounds(right - backWidth, y, backWidth, 20).build());
     }
 
     private void addQuestButton(QuestDefinition quest, int row) {
-        int y = this.panelTop + 55 + row * 45;
+        int y = rowTop(row);
         QuestExpressionInspector.CompletionMode mode = QuestExpressionInspector.completionMode(quest);
         Component label;
         boolean active;
@@ -92,12 +124,34 @@ public final class QuestListScreen extends Screen {
             active = !QuestCompletionController.isCompleting(quest);
         }
 
+        int right = this.frame.right() - this.layout.padding() - 8;
         Button button = Button.builder(label, ignored -> {
             ManualQuestStore.markChecked(quest);
-            show(new QuestListScreen(this.parent, this.page));
-        }).bounds(this.panelLeft + this.panelWidth - 132, y + 7, 104, 20).build();
+            show(new QuestListScreen(this.parent, this.page, this.previewQuests));
+        }).bounds(
+                right - this.actionWidth,
+                y + Math.max(2, (this.layout.cardHeight() - 20) / 2),
+                this.actionWidth,
+                20
+        ).build();
         button.active = active;
-        this.addRenderableWidget(button);
+        addButton(button);
+    }
+
+    private Button addButton(Button button) {
+        this.styledButtons.add(button);
+        return this.addRenderableWidget(button);
+    }
+
+    private int rowTop(int row) {
+        return this.layout.contentTop()
+                + row * (this.layout.cardHeight() + this.layout.gap());
+    }
+
+    private List<QuestDefinition> quests() {
+        return this.previewQuests == null
+                ? ClientQuestStore.snapshot().quests()
+                : this.previewQuests;
     }
 
     private void show(Screen screen) {
@@ -111,35 +165,20 @@ public final class QuestListScreen extends Screen {
             int mouseY,
             float delta
     ) {
-        graphics.fill(0, 0, this.width, this.height, 0xB0000000);
-        graphics.fill(
-                this.panelLeft + 5,
-                this.panelTop + 6,
-                this.panelLeft + this.panelWidth + 5,
-                this.panelTop + this.panelHeight + 6,
-                0x66000000
-        );
-        graphics.fill(
-                this.panelLeft,
-                this.panelTop,
-                this.panelLeft + this.panelWidth,
-                this.panelTop + this.panelHeight,
-                PANEL_DARK
-        );
-        graphics.fill(
-                this.panelLeft + 3,
-                this.panelTop + 3,
-                this.panelLeft + this.panelWidth - 3,
-                this.panelTop + this.panelHeight - 3,
-                PANEL_COLOR
-        );
-        graphics.fill(
-                this.panelLeft + 14,
-                this.panelTop + 42,
-                this.panelLeft + this.panelWidth - 14,
-                this.panelTop + 44,
-                PANEL_MID
-        );
+        QuestLedgerTheme.drawBackdrop(graphics, this.frame);
+        QuestLedgerTheme.drawHeader(graphics, this.frame, this.layout.contentTop() - 3);
+        QuestLedgerTheme.drawFooter(graphics, this.frame, this.layout.contentBottom());
+
+        List<QuestDefinition> quests = quests();
+        int firstIndex = this.page * this.layout.questsPerPage();
+        int lastIndex = Math.min(quests.size(), firstIndex + this.layout.questsPerPage());
+        if (quests.isEmpty()) {
+            drawEmptyCard(graphics);
+        } else {
+            for (int index = firstIndex; index < lastIndex; index++) {
+                drawQuestCard(graphics, quests.get(index), index - firstIndex);
+            }
+        }
     }
 
     @Override
@@ -151,32 +190,29 @@ public final class QuestListScreen extends Screen {
     ) {
         super.extractRenderState(graphics, mouseX, mouseY, delta);
 
-        int titleWidth = this.font.width(this.title);
+        String title = QuestLedgerUiLayout.ellipsize(
+                this.font::width,
+                this.title.getString(),
+                this.frame.width() - 48
+        );
         graphics.text(
                 this.font,
-                this.title,
-                this.panelLeft + (this.panelWidth - titleWidth) / 2,
-                this.panelTop + 13,
-                INK,
+                Component.literal(title),
+                this.frame.left() + (this.frame.width() - this.font.width(title)) / 2,
+                this.frame.top() + 17,
+                QuestLedgerTheme.INK,
                 false
         );
 
-        List<QuestDefinition> quests = ClientQuestStore.snapshot().quests();
-        int firstIndex = this.page * QUESTS_PER_PAGE;
-        int lastIndex = Math.min(quests.size(), firstIndex + QUESTS_PER_PAGE);
+        List<QuestDefinition> quests = quests();
+        int firstIndex = this.page * this.layout.questsPerPage();
+        int lastIndex = Math.min(quests.size(), firstIndex + this.layout.questsPerPage());
         if (quests.isEmpty()) {
-            graphics.text(
-                    this.font,
-                    Component.translatable("screen.questledger.list.empty"),
-                    this.panelLeft + 24,
-                    this.panelTop + 64,
-                    MUTED_INK,
-                    false
-            );
+            drawEmptyText(graphics);
         }
 
         for (int index = firstIndex; index < lastIndex; index++) {
-            drawQuest(graphics, quests.get(index), index - firstIndex);
+            drawQuestContent(graphics, quests.get(index), index - firstIndex);
         }
 
         Component pageLabel = Component.translatable(
@@ -184,43 +220,146 @@ public final class QuestListScreen extends Screen {
                 this.page + 1,
                 this.pageCount
         );
+        String fittedPage = QuestLedgerUiLayout.ellipsize(
+                this.font::width,
+                pageLabel.getString(),
+                Math.max(44, this.frame.width() / 4)
+        );
         graphics.text(
                 this.font,
-                pageLabel,
-                this.panelLeft + 218,
-                this.panelTop + this.panelHeight - 25,
-                MUTED_INK,
+                Component.literal(fittedPage),
+                this.frame.left() + (this.frame.width() - this.font.width(fittedPage)) / 2,
+                this.frame.bottom() - 25,
+                QuestLedgerTheme.MUTED,
+                false
+        );
+
+        for (Button button : this.styledButtons) {
+            QuestLedgerTheme.drawButton(graphics, this.font, button, mouseX, mouseY);
+        }
+    }
+
+    private int emptyCardLeft() {
+        return this.frame.left() + this.layout.padding();
+    }
+
+    private int emptyCardRight() {
+        return this.frame.right() - this.layout.padding();
+    }
+
+    private int emptyCardTop() {
+        return this.layout.contentTop() + 14;
+    }
+
+    private int emptyCardBottom() {
+        return Math.min(this.layout.contentBottom() - 10, emptyCardTop() + 72);
+    }
+
+    private void drawEmptyCard(GuiGraphicsExtractor graphics) {
+        QuestLedgerTheme.drawCard(
+                graphics,
+                emptyCardLeft(),
+                emptyCardTop(),
+                emptyCardRight(),
+                emptyCardBottom(),
                 false
         );
     }
 
-    private void drawQuest(
+    private void drawEmptyText(GuiGraphicsExtractor graphics) {
+        Component empty = Component.translatable("screen.questledger.list.empty");
+        String fitted = QuestLedgerUiLayout.ellipsize(
+                this.font::width,
+                empty.getString(),
+                emptyCardRight() - emptyCardLeft() - 32
+        );
+        graphics.text(
+                this.font,
+                Component.literal(fitted),
+                emptyCardLeft() + (emptyCardRight() - emptyCardLeft() - this.font.width(fitted)) / 2,
+                emptyCardTop() + Math.max(12, (emptyCardBottom() - emptyCardTop() - 9) / 2),
+                QuestLedgerTheme.MUTED,
+                false
+        );
+    }
+
+    private void drawQuestCard(
             GuiGraphicsExtractor graphics,
             QuestDefinition quest,
             int row
     ) {
-        int y = this.panelTop + 55 + row * 45;
-        graphics.fill(
-                this.panelLeft + 18,
+        int y = rowTop(row);
+        int left = this.frame.left() + this.layout.padding();
+        int right = this.frame.right() - this.layout.padding();
+        int bottom = Math.min(this.layout.contentBottom(), y + this.layout.cardHeight());
+        QuestLedgerTheme.drawCard(
+                graphics,
+                left,
                 y,
-                this.panelLeft + this.panelWidth - 18,
-                y + 38,
-                0x22FFFFFF
+                right,
+                bottom,
+                QuestCompletionController.isCompleting(quest)
         );
-        graphics.text(
-                this.font,
-                Component.literal(quest.title()),
-                this.panelLeft + 28,
-                y + 7,
-                INK,
-                false
-        );
+    }
 
-        String modeKey = switch (QuestExpressionInspector.completionMode(quest)) {
+    private void drawQuestContent(
+            GuiGraphicsExtractor graphics,
+            QuestDefinition quest,
+            int row
+    ) {
+        int y = rowTop(row);
+        int left = this.frame.left() + this.layout.padding();
+        int right = this.frame.right() - this.layout.padding();
+        int bottom = Math.min(this.layout.contentBottom(), y + this.layout.cardHeight());
+
+        QuestExpressionInspector.CompletionMode completionMode =
+                QuestExpressionInspector.completionMode(quest);
+        String modeKey = switch (completionMode) {
             case AUTOMATIC -> "automatic";
             case MANUAL -> "manual";
             case HYBRID -> "hybrid";
         };
+        int badgeColor = switch (completionMode) {
+            case AUTOMATIC -> 0xFFD4E5D2;
+            case MANUAL -> 0xFFE8D0C9;
+            case HYBRID -> 0xFFD5DFE8;
+        };
+        int badgeInk = switch (completionMode) {
+            case AUTOMATIC -> QuestLedgerTheme.GREEN;
+            case MANUAL -> QuestLedgerTheme.RED;
+            case HYBRID -> QuestLedgerTheme.BLUE;
+        };
+        int badgeWidth = 46;
+        int badgeX = left + 10;
+        int badgeY = y + Math.max(4, (this.layout.cardHeight() - 30) / 2);
+        QuestLedgerTheme.drawBadge(
+                graphics,
+                this.font,
+                Component.translatable("screen.questledger.mode." + modeKey),
+                badgeX,
+                badgeY,
+                badgeWidth,
+                badgeColor,
+                badgeInk
+        );
+
+        int textX = badgeX + badgeWidth + 9;
+        int actionLeft = right - 8 - this.actionWidth;
+        int textWidth = Math.max(20, actionLeft - textX - 8);
+        String fittedTitle = QuestLedgerUiLayout.ellipsize(
+                this.font::width,
+                quest.title(),
+                textWidth
+        );
+        graphics.text(
+                this.font,
+                Component.literal(fittedTitle),
+                textX,
+                badgeY - 1,
+                QuestLedgerTheme.INK,
+                false
+        );
+
         Component detail = Component.translatable(
                 "screen.questledger.list.detail",
                 Component.translatable("screen.questledger.mode." + modeKey),
@@ -229,12 +368,17 @@ public final class QuestListScreen extends Screen {
                                 + QuestExpressionInspector.categoryKey(quest)
                 )
         );
+        String fittedDetail = QuestLedgerUiLayout.ellipsize(
+                this.font::width,
+                detail.getString(),
+                textWidth
+        );
         graphics.text(
                 this.font,
-                detail,
-                this.panelLeft + 28,
-                y + 22,
-                MUTED_INK,
+                Component.literal(fittedDetail),
+                textX,
+                Math.min(bottom - 11, badgeY + 15),
+                QuestLedgerTheme.MUTED,
                 false
         );
     }

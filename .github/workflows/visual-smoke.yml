@@ -1,0 +1,149 @@
+name: visual-smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  screenshot:
+    name: screenshot-${{ matrix.profile }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: standard
+            width: 1280
+            height: 720
+            display: 1280x720x24
+            gui_scale: 2
+          - profile: compact
+            width: 854
+            height: 480
+            display: 854x480x24
+            gui_scale: 3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.1'
+
+      - name: Install virtual display and software rendering
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb openbox imagemagick \
+            mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libasound2t64
+
+      - name: Launch Minecraft 26.2 and capture Quest Ledger
+        env:
+          QUEST_LEDGER_VISUAL_SMOKE_TEST: '1'
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          MESA_LOADER_DRIVER_OVERRIDE: llvmpipe
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          TEST_WIDTH: ${{ matrix.width }}
+          TEST_HEIGHT: ${{ matrix.height }}
+          TEST_DISPLAY: ${{ matrix.display }}
+          TEST_GUI_SCALE: ${{ matrix.gui_scale }}
+        run: |
+          set -euo pipefail
+          mkdir -p run visual-output
+          cat > run/options.txt <<EOF
+          lang:ko_kr
+          fullscreen:false
+          guiScale:${TEST_GUI_SCALE}
+          EOF
+
+          Xvfb :99 -screen 0 "${TEST_DISPLAY}" -ac +extension GLX +render -noreset \
+            >visual-output/xvfb.log 2>&1 &
+          export DISPLAY=:99
+          sleep 2
+          openbox >visual-output/openbox.log 2>&1 &
+
+          gradle runClient --no-daemon --stacktrace \
+            --args="--width ${TEST_WIDTH} --height ${TEST_HEIGHT}" \
+            >visual-output/client.log 2>&1 &
+          GAME_PID=$!
+
+          wait_for_marker() {
+            local marker="$1"
+            for _ in $(seq 1 360); do
+              [ -f "run/$marker" ] && return 0
+              if ! kill -0 "$GAME_PID" 2>/dev/null; then
+                echo 'Minecraft exited before the screenshot marker appeared.'
+                tail -n 300 visual-output/client.log || true
+                exit 1
+              fi
+              sleep 1
+            done
+            echo "Timed out waiting for $marker"
+            tail -n 300 visual-output/client.log || true
+            exit 1
+          }
+
+          collect_candidates() {
+            local marker="$1"
+            local prefix="$2"
+            local selected="$3"
+            wait_for_marker "$marker"
+
+            [ -f "run/${prefix}-targets.txt" ] && \
+              cp "run/${prefix}-targets.txt" visual-output/
+
+            shopt -s nullglob
+            local candidates=(run/screenshots/${prefix}-target-*.png)
+            if [ "${#candidates[@]}" -eq 0 ]; then
+              echo "No RenderTarget screenshot candidates were created for $prefix."
+              cat "run/${prefix}-targets.txt" 2>/dev/null || true
+              tail -n 300 visual-output/client.log || true
+              exit 1
+            fi
+
+            local best_file=''
+            local best_mean='0'
+            for source in "${candidates[@]}"; do
+              local base
+              base=$(basename "$source")
+              cp "$source" "visual-output/$base"
+              identify "visual-output/$base"
+              local mean
+              mean=$(convert "visual-output/$base" -colorspace gray \
+                -format '%[fx:mean]' info:)
+              echo "$base grayscale mean: $mean"
+              if awk -v a="$mean" -v b="$best_mean" 'BEGIN { exit !(a > b) }'; then
+                best_mean="$mean"
+                best_file="visual-output/$base"
+              fi
+            done
+
+            echo "$prefix best grayscale mean: $best_mean"
+            awk -v mean="$best_mean" 'BEGIN { if (mean < 0.01) exit 1 }'
+            cp "$best_file" "visual-output/$selected"
+          }
+
+          collect_candidates quest-ledger-builder-ready builder quest-ledger-builder.png
+          collect_candidates quest-ledger-list-ready list quest-ledger-list.png
+          collect_candidates quest-ledger-types-ready types quest-ledger-types.png
+
+          wait "$GAME_PID" || {
+            tail -n 300 visual-output/client.log || true
+            exit 1
+          }
+
+      - name: Upload real Minecraft screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quest-ledger-visual-${{ matrix.profile }}
+          path: visual-output/

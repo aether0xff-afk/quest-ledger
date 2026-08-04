@@ -11,27 +11,41 @@ The mod itself does **not** connect to or run an LLM. QuestScript can be copied 
 
 ## Current milestone
 
-Quest Ledger 0.3 includes:
+Quest Ledger 0.4 includes:
 
-- a `Q` key binding that opens a medieval parchment ledger;
+- a `Q` key binding that opens a responsive medieval parchment ledger;
+- a unified parchment, leather, and brass interface for buttons, cards, badges, and navigation;
+- layouts validated from compact 320×240 GUI space through 1920×1080;
+- overflow-safe Korean and English labels, quest titles, status text, and HUD entries;
 - Builder and QuestScript editor tabs backed by the same typed AST;
 - parsing and semantic validation before save or mode conversion;
 - Builder conditions for current inventory, blocks mined, mobs killed, and manual confirmation;
-- an Active Quests screen with automatic, manual, and hybrid completion labels;
-- an in-game quest-type guide with practical examples;
+- an adaptive Active Quests screen with automatic, manual, and hybrid completion badges;
+- a responsive tabbed quest-type guide with practical examples;
 - persistent manual confirmations scoped to each world or server;
 - automatic runtime evaluation every five client ticks;
 - immediate completion when a condition becomes true, with no configurable timer;
 - creation-relative mining, crafting, use, pickup, drop, and kill statistics;
 - persisted per-quest statistic baselines that survive restarts;
 - independent quest stores for every singleplayer world and multiplayer server;
+- recoverable two-file quest/runtime transactions and interrupted-save rollback;
+- persistent per-quest runtime IDs and automatic manual-state migration;
 - safe migration and archival of the old client-wide store;
 - `wax_seal`, `ink_check`, and `page_fold` completion effects;
 - automatic removal and per-scope completion history;
-- an animated HUD showing up to three active quests;
+- a responsive animated HUD showing up to three active quests;
 - Korean and English localization;
 - backend-neutral GUI rendering for both Vulkan and OpenGL;
-- parser self-tests and a GitHub Actions build.
+- parser, transaction, and multi-resolution UI regression tests;
+- real Minecraft 26.2 visual smoke tests at standard and compact GUI profiles.
+
+## Responsive interface
+
+Quest Ledger 0.4 no longer relies on one fixed set of screen coordinates. A shared layout engine calculates panel, editor, card, footer, and button bounds for the current GUI size.
+
+Long text is measured with Minecraft's active font before rendering. Text that cannot fit is shortened with an ellipsis rather than being allowed to escape its card or button. Very small screens combine completion-effect and HUD controls into one row, preserving separate space for status and condition-preview text.
+
+The Active Quests screen adapts its card count to the available height. Compact GUI profiles show three cards per page, while larger profiles show up to six.
 
 ## Quest completion modes
 
@@ -99,7 +113,9 @@ config/quest-ledger/worlds/<scope-name>-<hash>/
 
 Singleplayer scopes use the normalized save path. Multiplayer scopes use the server address. Switching worlds or servers unloads the previous scope before loading the next one.
 
-When upgrading from 0.1, the old client-wide quest and history files are moved into the first opened scope and archived under `config/quest-ledger/legacy/`.
+`quests.qs` and `runtime-state.properties` are committed through one recoverable transaction. If saving is interrupted between the two files, the next scope load restores the previous consistent generation. The in-memory quest list changes only after both files commit successfully.
+
+When upgrading from older versions, existing manual confirmation keys are migrated to persistent runtime IDs. The old 0.1 client-wide quest and history files are moved into the first opened scope and archived under `config/quest-ledger/legacy/`.
 
 ## Statistic semantics
 
@@ -118,6 +134,18 @@ quest "고대 잔해 네 개 더" {
 If the vanilla statistic was already 100 when the quest was saved, Quest Ledger stores 100 as the baseline and completes at 104. The baseline is kept in `runtime-state.properties` and survives game restarts.
 
 Inventory conditions remain absolute. For example, `inventory.count("minecraft:diamond") >= 4` checks the player's current inventory rather than items acquired after creation.
+
+## Verification
+
+Every pull request runs the complete Java 25/Fabric build plus:
+
+- QuestScript parser and formatter self-tests;
+- four recoverable-storage transaction scenarios;
+- UI geometry and text-fitting tests at 320×240, 360×270, 426×240, 640×360, 854×480, 1280×720, and 1920×1080;
+- a real Minecraft 26.2 client under software rendering at 1280×720/GUI scale 2 and 854×480/GUI scale 3;
+- editor, Active Quests, and quest-type guide screenshot capture for both visual profiles.
+
+The visual workflow is inert during normal play and activates only when `QUEST_LEDGER_VISUAL_SMOKE_TEST=1` is set by CI.
 
 ## Toolchain
 

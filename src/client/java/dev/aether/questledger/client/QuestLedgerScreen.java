@@ -4,6 +4,7 @@ import dev.aether.questledger.questscript.QuestScript;
 import dev.aether.questledger.questscript.QuestScriptException;
 import dev.aether.questledger.questscript.QuestScriptUserFormatter;
 import dev.aether.questledger.questscript.ast.QuestDefinition;
+import dev.aether.questledger.ui.QuestLedgerUiLayout;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -11,30 +12,24 @@ import net.minecraft.client.gui.components.MultiLineEditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public final class QuestLedgerScreen extends Screen {
     private enum Mode {
         BUILDER,
         CODE
     }
 
-    private static final int PANEL_COLOR = 0xFFF0D9A4;
-    private static final int PANEL_DARK = 0xFF5B3A24;
-    private static final int PANEL_MID = 0xFF9A6A3B;
-    private static final int INK = 0xFF2B1A12;
-    private static final int MUTED_INK = 0xFF6F5139;
-    private static final int ERROR_INK = 0xFF9D271E;
-    private static final int SUCCESS_INK = 0xFF355B2A;
-
     private final Screen parent;
     private final QuestEditorModel model;
     private final Mode mode;
     private final Component status;
     private final boolean statusError;
+    private final List<Button> styledButtons = new ArrayList<>();
 
-    private int panelLeft;
-    private int panelTop;
-    private int panelWidth;
-    private int panelHeight;
+    private QuestLedgerUiLayout.Frame frame;
+    private QuestLedgerUiLayout.Editor layout;
 
     private EditBox titleField;
     private EditBox targetField;
@@ -65,10 +60,9 @@ public final class QuestLedgerScreen extends Screen {
 
     @Override
     protected void init() {
-        this.panelWidth = Math.min(560, Math.max(300, this.width - 32));
-        this.panelHeight = Math.min(350, Math.max(250, this.height - 32));
-        this.panelLeft = (this.width - this.panelWidth) / 2;
-        this.panelTop = (this.height - this.panelHeight) / 2;
+        this.styledButtons.clear();
+        this.frame = QuestLedgerUiLayout.frame(this.width, this.height);
+        this.layout = QuestLedgerUiLayout.editor(this.frame);
 
         addTabs();
         if (this.mode == Mode.BUILDER) {
@@ -80,110 +74,137 @@ public final class QuestLedgerScreen extends Screen {
     }
 
     private void addTabs() {
-        int y = this.panelTop + 30;
-        int width = (this.panelWidth - 54) / 2;
+        int gap = 6;
+        int available = this.frame.width() - this.layout.padding() * 2;
+        int width = Math.max(70, (available - gap) / 2);
+        int x = this.frame.left() + this.layout.padding();
+        int y = this.frame.top() + 33;
 
-        Button builder = Button.builder(
+        Button builder = addButton(Button.builder(
                 Component.translatable("screen.questledger.builder"),
                 button -> switchToBuilder()
-        ).bounds(this.panelLeft + 22, y, width, 20).build();
+        ).bounds(x, y, width, 20).build());
         builder.active = this.mode != Mode.BUILDER;
-        this.addRenderableWidget(builder);
 
-        Button code = Button.builder(
+        Button code = addButton(Button.builder(
                 Component.translatable("screen.questledger.code"),
                 button -> switchToCode()
-        ).bounds(this.panelLeft + 32 + width, y, width, 20).build();
+        ).bounds(x + width + gap, y, width, 20).build());
         code.active = this.mode != Mode.CODE;
-        this.addRenderableWidget(code);
     }
 
     private void addFooterButtons() {
-        int y = this.panelTop + this.panelHeight - 32;
-        int available = this.panelWidth - 52;
-        int buttonWidth = Math.min(96, Math.max(70, (available - 16) / 3));
+        int gap = 6;
+        int available = this.frame.width() - this.layout.padding() * 2;
+        int buttonWidth = Math.max(64, (available - gap * 2) / 3);
+        int x = this.frame.left() + this.layout.padding();
+        int y = this.frame.bottom() - 31;
 
-        this.addRenderableWidget(Button.builder(
+        addButton(Button.builder(
                 Component.translatable("screen.questledger.active"),
                 button -> show(new QuestListScreen(this))
-        ).bounds(this.panelLeft + 22, y, buttonWidth, 20).build());
+        ).bounds(x, y, buttonWidth, 20).build());
 
-        this.addRenderableWidget(Button.builder(
+        addButton(Button.builder(
                 Component.translatable("screen.questledger.save"),
                 button -> saveQuest()
-        ).bounds(
-                this.panelLeft + this.panelWidth - 22 - buttonWidth * 2 - 8,
-                y,
-                buttonWidth,
-                20
-        ).build());
+        ).bounds(x + buttonWidth + gap, y, buttonWidth, 20).build());
 
-        this.addRenderableWidget(Button.builder(
+        addButton(Button.builder(
                 Component.translatable("screen.questledger.cancel"),
                 button -> onClose()
-        ).bounds(
-                this.panelLeft + this.panelWidth - 22 - buttonWidth,
-                y,
-                buttonWidth,
-                20
-        ).build());
+        ).bounds(x + (buttonWidth + gap) * 2, y, buttonWidth, 20).build());
     }
 
     private void addBuilderWidgets() {
-        int x = this.panelLeft + 154;
-        int y = this.panelTop + 67;
-        int width = this.panelWidth - 178;
+        int x = this.layout.fieldLeft();
+        int y = this.layout.contentTop();
+        int width = this.layout.fieldWidth();
+        int step = this.layout.rowStep();
 
         this.titleField = textField(x, y, width, "screen.questledger.field.title", this.model.title());
 
-        y += 32;
-        this.addRenderableWidget(Button.builder(conditionLabel(), button -> {
+        y += step;
+        addButton(Button.builder(conditionLabel(), button -> {
             syncBuilderFields();
             this.model.cycleConditionKind();
             button.setMessage(conditionLabel());
             updateConditionWidgets();
         }).bounds(x, y, width, 20).build());
 
-        y += 32;
+        y += step;
         this.targetField = textField(x, y, width, "screen.questledger.field.target", this.model.targetId());
 
-        y += 32;
-        this.operatorButton = this.addRenderableWidget(Button.builder(
+        y += step;
+        addAmountWidgets(x, y, width);
+
+        y += step;
+        if (this.frame.tiny()) {
+            int gap = 6;
+            int half = Math.max(38, (width - gap) / 2);
+            addAnimationButton(x, y, half);
+            addHudButton(x + half + gap, y, Math.max(38, width - half - gap));
+        } else {
+            addAnimationButton(x, y, width);
+            y += step;
+            addHudButton(x, y, width);
+        }
+
+        updateConditionWidgets();
+    }
+
+    private void addAnimationButton(int x, int y, int width) {
+        addButton(Button.builder(animationLabel(), button -> {
+            this.model.cycleAnimation();
+            button.setMessage(animationLabel());
+        }).bounds(x, y, width, 20).build());
+    }
+
+    private void addHudButton(int x, int y, int width) {
+        addButton(Button.builder(hudLabel(), button -> {
+            this.model.toggleHudVisible();
+            button.setMessage(hudLabel());
+        }).bounds(x, y, width, 20).build());
+    }
+
+    private void addAmountWidgets(int x, int y, int width) {
+        int gap = 4;
+        int operatorWidth = Math.min(52, Math.max(38, width / 4));
+        this.operatorButton = addButton(Button.builder(
                 Component.literal(this.model.operator().symbol()),
                 button -> {
                     this.model.cycleOperator();
                     button.setMessage(Component.literal(this.model.operator().symbol()));
                 }
-        ).bounds(x, y, 54, 20).build());
-        this.minusButton = this.addRenderableWidget(Button.builder(
-                Component.literal("−"),
-                button -> adjustAmount(-1)
-        ).bounds(x + 62, y, 28, 20).build());
-        this.amountField = textField(
-                x + 96,
-                y,
-                Math.max(54, width - 130),
-                "screen.questledger.field.amount",
-                Integer.toString(this.model.amount())
-        );
-        this.plusButton = this.addRenderableWidget(Button.builder(
-                Component.literal("+"),
-                button -> adjustAmount(1)
-        ).bounds(x + width - 28, y, 28, 20).build());
+        ).bounds(x, y, operatorWidth, 20).build());
 
-        y += 32;
-        this.addRenderableWidget(Button.builder(animationLabel(), button -> {
-            this.model.cycleAnimation();
-            button.setMessage(animationLabel());
-        }).bounds(x, y, width, 20).build());
-
-        y += 32;
-        this.addRenderableWidget(Button.builder(hudLabel(), button -> {
-            this.model.toggleHudVisible();
-            button.setMessage(hudLabel());
-        }).bounds(x, y, width, 20).build());
-
-        updateConditionWidgets();
+        if (width >= 154) {
+            int small = 24;
+            int amountWidth = Math.max(38, width - operatorWidth - small * 2 - gap * 3);
+            this.minusButton = addButton(Button.builder(
+                    Component.literal("−"),
+                    button -> adjustAmount(-1)
+            ).bounds(x + operatorWidth + gap, y, small, 20).build());
+            this.amountField = textField(
+                    x + operatorWidth + small + gap * 2,
+                    y,
+                    amountWidth,
+                    "screen.questledger.field.amount",
+                    Integer.toString(this.model.amount())
+            );
+            this.plusButton = addButton(Button.builder(
+                    Component.literal("+"),
+                    button -> adjustAmount(1)
+            ).bounds(x + width - small, y, small, 20).build());
+        } else {
+            this.amountField = textField(
+                    x + operatorWidth + gap,
+                    y,
+                    Math.max(32, width - operatorWidth - gap),
+                    "screen.questledger.field.amount",
+                    Integer.toString(this.model.amount())
+            );
+        }
     }
 
     private void updateConditionWidgets() {
@@ -210,29 +231,37 @@ public final class QuestLedgerScreen extends Screen {
                 this.font,
                 x,
                 y,
-                width,
+                Math.max(24, width),
                 20,
                 Component.translatable(narrationKey)
         );
+        field.setTextColor(0xFFF8E9C5);
         field.setValue(value);
         return this.addRenderableWidget(field);
     }
 
+    private Button addButton(Button button) {
+        this.styledButtons.add(button);
+        return this.addRenderableWidget(button);
+    }
+
     private void addCodeEditor() {
-        int x = this.panelLeft + 24;
-        int y = this.panelTop + 67;
+        int x = this.frame.left() + this.layout.padding();
+        int y = this.layout.contentTop() + 4;
+        int editorWidth = this.frame.width() - this.layout.padding() * 2;
+        int editorHeight = Math.max(60, this.layout.contentBottom() - y - 4);
         this.codeEditor = MultiLineEditBox.builder()
                 .setShowDecorations(false)
                 .setShowBackground(false)
-                .setTextColor(INK)
-                .setCursorColor(PANEL_DARK)
+                .setTextColor(QuestLedgerTheme.INK)
+                .setCursorColor(QuestLedgerTheme.LEATHER)
                 .setTextShadow(false)
-                .setX(x)
-                .setY(y)
+                .setX(x + 5)
+                .setY(y + 5)
                 .build(
                         this.font,
-                        this.panelWidth - 48,
-                        this.panelHeight - 119,
+                        Math.max(40, editorWidth - 10),
+                        Math.max(40, editorHeight - 10),
                         Component.translatable("screen.questledger.code.placeholder")
                 );
         this.codeEditor.setCharacterLimit(16_384);
@@ -374,50 +403,19 @@ public final class QuestLedgerScreen extends Screen {
             int mouseY,
             float delta
     ) {
-        graphics.fill(0, 0, this.width, this.height, 0xB0000000);
-        graphics.fill(
-                this.panelLeft + 5,
-                this.panelTop + 6,
-                this.panelLeft + this.panelWidth + 5,
-                this.panelTop + this.panelHeight + 6,
-                0x66000000
-        );
-        graphics.fill(
-                this.panelLeft,
-                this.panelTop,
-                this.panelLeft + this.panelWidth,
-                this.panelTop + this.panelHeight,
-                PANEL_DARK
-        );
-        graphics.fill(
-                this.panelLeft + 3,
-                this.panelTop + 3,
-                this.panelLeft + this.panelWidth - 3,
-                this.panelTop + this.panelHeight - 3,
-                PANEL_COLOR
-        );
-        graphics.fill(
-                this.panelLeft + 14,
-                this.panelTop + 56,
-                this.panelLeft + this.panelWidth - 14,
-                this.panelTop + 58,
-                PANEL_MID
-        );
+        QuestLedgerTheme.drawBackdrop(graphics, this.frame);
+        QuestLedgerTheme.drawHeader(graphics, this.frame, this.layout.contentTop() - 3);
+        QuestLedgerTheme.drawFooter(graphics, this.frame, this.layout.contentBottom());
 
         if (this.mode == Mode.CODE) {
-            graphics.fill(
-                    this.panelLeft + 18,
-                    this.panelTop + 61,
-                    this.panelLeft + this.panelWidth - 18,
-                    this.panelTop + this.panelHeight - 43,
-                    0x553C2415
-            );
-            graphics.fill(
-                    this.panelLeft + 21,
-                    this.panelTop + 64,
-                    this.panelLeft + this.panelWidth - 21,
-                    this.panelTop + this.panelHeight - 46,
-                    0xFFF8E8BC
+            int x = this.frame.left() + this.layout.padding();
+            int y = this.layout.contentTop() + 4;
+            QuestLedgerTheme.drawInset(
+                    graphics,
+                    x,
+                    y,
+                    this.frame.right() - this.layout.padding(),
+                    this.layout.contentBottom() - 4
             );
         }
     }
@@ -431,69 +429,95 @@ public final class QuestLedgerScreen extends Screen {
     ) {
         super.extractRenderState(graphics, mouseX, mouseY, delta);
 
-        int titleWidth = this.font.width(this.title);
+        String fittedTitle = QuestLedgerUiLayout.ellipsize(
+                this.font::width,
+                this.title.getString(),
+                this.frame.width() - 48
+        );
         graphics.text(
                 this.font,
-                this.title,
-                this.panelLeft + (this.panelWidth - titleWidth) / 2,
-                this.panelTop + 11,
-                INK,
+                Component.literal(fittedTitle),
+                this.frame.left() + (this.frame.width() - this.font.width(fittedTitle)) / 2,
+                this.frame.top() + 14,
+                QuestLedgerTheme.INK,
                 false
         );
 
         if (this.mode == Mode.BUILDER) {
             drawBuilderLabels(graphics);
         }
-        if (!this.status.getString().isBlank()) {
-            graphics.text(
-                    this.font,
-                    this.status,
-                    this.panelLeft + 24,
-                    this.panelTop + this.panelHeight - 52,
-                    this.statusError ? ERROR_INK : SUCCESS_INK,
-                    false
-            );
+        drawStatusOrPreview(graphics);
+        for (Button button : this.styledButtons) {
+            QuestLedgerTheme.drawButton(graphics, this.font, button, mouseX, mouseY);
         }
     }
 
     private void drawBuilderLabels(GuiGraphicsExtractor graphics) {
-        int x = this.panelLeft + 24;
-        int y = this.panelTop + 73;
-        String[] keys = {
-                "screen.questledger.field.title",
-                "screen.questledger.field.condition",
-                "screen.questledger.field.target",
-                "screen.questledger.field.amount",
-                "screen.questledger.field.animation",
-                "screen.questledger.field.hud"
-        };
+        int x = this.frame.left() + this.layout.padding();
+        int y = this.layout.contentTop() + 6;
+        String[] keys = this.frame.tiny()
+                ? new String[] {
+                        "screen.questledger.field.title",
+                        "screen.questledger.field.condition",
+                        "screen.questledger.field.target",
+                        "screen.questledger.field.amount",
+                        "screen.questledger.field.options"
+                }
+                : new String[] {
+                        "screen.questledger.field.title",
+                        "screen.questledger.field.condition",
+                        "screen.questledger.field.target",
+                        "screen.questledger.field.amount",
+                        "screen.questledger.field.animation",
+                        "screen.questledger.field.hud"
+                };
         for (int index = 0; index < keys.length; index++) {
-            graphics.text(
+            QuestLedgerTheme.drawSectionLabel(
+                    graphics,
                     this.font,
                     Component.translatable(keys[index]),
                     x,
-                    y + index * 32,
-                    INK,
-                    false
+                    y + index * this.layout.rowStep(),
+                    this.layout.labelWidth(),
+                    QuestLedgerTheme.INK
             );
+        }
+    }
+
+    private void drawStatusOrPreview(GuiGraphicsExtractor graphics) {
+        Component message;
+        int color;
+        if (!this.status.getString().isBlank()) {
+            message = this.status;
+            color = this.statusError ? QuestLedgerTheme.RED : QuestLedgerTheme.GREEN;
+        } else if (this.mode == Mode.BUILDER) {
+            if (this.model.conditionKind() == QuestEditorModel.ConditionKind.MANUAL) {
+                message = Component.translatable("screen.questledger.manual_hint");
+            } else {
+                message = Component.literal(
+                        this.model.conditionKind().functionName()
+                                + "(\"" + this.model.targetId() + "\") "
+                                + this.model.operator().symbol() + " " + this.model.amount()
+                );
+            }
+            color = QuestLedgerTheme.MUTED;
+        } else {
+            message = Component.translatable("screen.questledger.code.hint");
+            color = QuestLedgerTheme.MUTED;
         }
 
-        Component preview;
-        if (this.model.conditionKind() == QuestEditorModel.ConditionKind.MANUAL) {
-            preview = Component.translatable("screen.questledger.manual_hint");
-        } else {
-            preview = Component.literal(
-                    this.model.conditionKind().functionName()
-                            + "(\"" + this.model.targetId() + "\") "
-                            + this.model.operator().symbol() + " " + this.model.amount()
-            );
-        }
+        int maximumWidth = this.frame.width() - this.layout.padding() * 2;
+        String fitted = QuestLedgerUiLayout.ellipsize(
+                this.font::width,
+                message.getString(),
+                maximumWidth
+        );
         graphics.text(
                 this.font,
-                preview,
-                this.panelLeft + 24,
-                this.panelTop + this.panelHeight - 72,
-                MUTED_INK,
+                Component.literal(fitted),
+                this.frame.left() + this.layout.padding(),
+                this.layout.contentBottom() - 13,
+                color,
                 false
         );
     }
