@@ -21,6 +21,8 @@ public final class QuestListScreen extends Screen {
     private int page;
     private int pageCount;
     private int actionWidth;
+    private int pageLabelLeft;
+    private int pageLabelWidth;
 
     public QuestListScreen(Screen parent) {
         this(parent, 0, null);
@@ -45,8 +47,8 @@ public final class QuestListScreen extends Screen {
         this.actionWidth = QuestLedgerUiLayout.buttonWidth(
                 this.font::width,
                 Component.translatable("screen.questledger.list.confirm").getString(),
-                84,
-                126
+                this.frame.tiny() ? 68 : 84,
+                this.frame.tiny() ? 92 : 126
         );
 
         List<QuestDefinition> quests = quests();
@@ -68,43 +70,50 @@ public final class QuestListScreen extends Screen {
     private void addFooterButtons() {
         int y = this.frame.bottom() - 31;
         int x = this.frame.left() + this.layout.padding();
-        int gap = 5;
+        int gap = this.frame.tiny() ? 4 : 5;
+        int arrowWidth = this.frame.tiny() ? 24 : 28;
 
         Button previous = addButton(Button.builder(
                 Component.literal("‹"),
                 button -> show(new QuestListScreen(this.parent, this.page - 1, this.previewQuests))
-        ).bounds(x, y, 28, 20).build());
+        ).bounds(x, y, arrowWidth, 20).build());
         previous.active = this.page > 0;
 
+        int nextX = x + arrowWidth + gap;
         Button next = addButton(Button.builder(
                 Component.literal("›"),
                 button -> show(new QuestListScreen(this.parent, this.page + 1, this.previewQuests))
-        ).bounds(x + 28 + gap, y, 28, 20).build());
+        ).bounds(nextX, y, arrowWidth, 20).build());
         next.active = this.page + 1 < this.pageCount;
 
         int backWidth = QuestLedgerUiLayout.buttonWidth(
                 this.font::width,
                 Component.translatable("screen.questledger.back").getString(),
-                68,
-                100
+                this.frame.tiny() ? 52 : 68,
+                this.frame.tiny() ? 72 : 100
         );
         int typesWidth = QuestLedgerUiLayout.buttonWidth(
                 this.font::width,
                 Component.translatable("screen.questledger.types.button").getString(),
-                84,
-                126
+                this.frame.tiny() ? 68 : 84,
+                this.frame.tiny() ? 88 : 126
         );
         int right = this.frame.right() - this.layout.padding();
+        int typesX = right - backWidth - gap - typesWidth;
 
         addButton(Button.builder(
                 Component.translatable("screen.questledger.types.button"),
                 button -> show(new QuestTypesScreen(this))
-        ).bounds(right - backWidth - gap - typesWidth, y, typesWidth, 20).build());
+        ).bounds(typesX, y, typesWidth, 20).build());
 
         addButton(Button.builder(
                 Component.translatable("screen.questledger.back"),
                 button -> onClose()
         ).bounds(right - backWidth, y, backWidth, 20).build());
+
+        int arrowsRight = nextX + arrowWidth;
+        this.pageLabelLeft = arrowsRight + gap;
+        this.pageLabelWidth = Math.max(0, typesX - gap - this.pageLabelLeft);
     }
 
     private void addQuestButton(QuestDefinition quest, int row) {
@@ -220,15 +229,21 @@ public final class QuestListScreen extends Screen {
                 this.page + 1,
                 this.pageCount
         );
+        int maximumPageWidth = this.frame.tiny()
+                ? this.pageLabelWidth
+                : Math.max(44, this.frame.width() / 4);
         String fittedPage = QuestLedgerUiLayout.ellipsize(
                 this.font::width,
                 pageLabel.getString(),
-                Math.max(44, this.frame.width() / 4)
+                maximumPageWidth
         );
+        int pageX = this.frame.tiny()
+                ? this.pageLabelLeft + Math.max(0, (this.pageLabelWidth - this.font.width(fittedPage)) / 2)
+                : this.frame.left() + (this.frame.width() - this.font.width(fittedPage)) / 2;
         graphics.text(
                 this.font,
                 Component.literal(fittedPage),
-                this.frame.left() + (this.frame.width() - this.font.width(fittedPage)) / 2,
+                pageX,
                 this.frame.bottom() - 25,
                 QuestLedgerTheme.MUTED,
                 false
@@ -329,7 +344,7 @@ public final class QuestListScreen extends Screen {
             case MANUAL -> QuestLedgerTheme.RED;
             case HYBRID -> QuestLedgerTheme.BLUE;
         };
-        int badgeWidth = 46;
+        int badgeWidth = this.frame.tiny() ? 40 : 46;
         int badgeX = left + 10;
         int badgeY = y + Math.max(4, (this.layout.cardHeight() - 30) / 2);
         QuestLedgerTheme.drawBadge(
@@ -343,7 +358,7 @@ public final class QuestListScreen extends Screen {
                 badgeInk
         );
 
-        int textX = badgeX + badgeWidth + 9;
+        int textX = badgeX + badgeWidth + (this.frame.tiny() ? 6 : 9);
         int actionLeft = right - 8 - this.actionWidth;
         int textWidth = Math.max(20, actionLeft - textX - 8);
         String fittedTitle = QuestLedgerUiLayout.ellipsize(

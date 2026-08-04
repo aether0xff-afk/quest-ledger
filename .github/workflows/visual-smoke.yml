@@ -26,6 +26,11 @@ jobs:
             height: 480
             display: 854x480x24
             gui_scale: 3
+          - profile: micro
+            width: 720
+            height: 405
+            display: 720x405x24
+            gui_scale: 3
 
     steps:
       - uses: actions/checkout@v4

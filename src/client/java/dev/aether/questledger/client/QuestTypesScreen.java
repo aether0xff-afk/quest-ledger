@@ -38,14 +38,15 @@ public final class QuestTypesScreen extends Screen {
         this.frame = QuestLedgerUiLayout.frame(this.width, this.height);
         this.padding = this.frame.compact() ? 12 : 18;
         this.contentTop = this.frame.top() + (this.frame.tiny() ? 56 : 64);
-        this.contentBottom = this.frame.bottom() - (this.frame.tiny() ? 38 : 44);
+        // Reserve the same protected footer band used by the compact quest list.
+        this.contentBottom = this.frame.bottom() - (this.frame.tiny() ? 44 : 44);
 
         addTabs();
 
         int backWidth = QuestLedgerUiLayout.buttonWidth(
                 this.font::width,
                 Component.translatable("screen.questledger.back").getString(),
-                70,
+                this.frame.tiny() ? 58 : 70,
                 104
         );
         addButton(Button.builder(
@@ -171,14 +172,15 @@ public final class QuestTypesScreen extends Screen {
                 false
         );
 
-        int gridTop = this.contentTop + 21;
+        int gridTop = this.contentTop + (this.frame.tiny() ? 19 : 21);
         int availableHeight = Math.max(30, this.contentBottom - gridTop - 5);
-        int columns = this.frame.width() >= 360 ? 2 : 1;
+        // Never collapse the compact guide to one column: six rows cannot fit its height.
+        int columns = count > 1 ? 2 : 1;
         int rows = (count + columns - 1) / columns;
         int gap = this.frame.tiny() ? 4 : 6;
         int cardWidth = Math.max(40, (right - left - gap * (columns - 1)) / columns);
         int cardHeight = Math.max(
-                18,
+                16,
                 Math.min(42, (availableHeight - gap * Math.max(0, rows - 1)) / rows)
         );
 

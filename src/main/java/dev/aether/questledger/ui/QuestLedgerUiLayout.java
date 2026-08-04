@@ -29,15 +29,17 @@ public final class QuestLedgerUiLayout {
     public static Editor editor(Frame frame) {
         int padding = frame.compact() ? 14 : 20;
         int headerHeight = frame.tiny() ? 54 : 62;
-        int footerHeight = frame.tiny() ? 38 : 44;
+        // Tiny screens need an explicit gap between the preview/status line and footer controls.
+        int footerHeight = frame.tiny() ? 46 : 44;
         int contentTop = frame.top() + headerHeight;
         int contentBottom = frame.bottom() - footerHeight;
         int labelWidth = clamp(frame.width() / 4, 76, 132);
         int gap = frame.compact() ? 8 : 12;
         int fieldLeft = frame.left() + padding + labelWidth + gap;
         int fieldWidth = frame.right() - padding - fieldLeft;
-        int availableHeight = Math.max(120, contentBottom - contentTop);
-        int rowStep = clamp(availableHeight / 6, 22, 36);
+        int availableHeight = Math.max(100, contentBottom - contentTop);
+        // Five compact rows use 20 px pitch: four full rows plus the shared effect/HUD row.
+        int rowStep = frame.tiny() ? 20 : clamp(availableHeight / 6, 22, 36);
         return new Editor(
                 padding,
                 headerHeight,
@@ -54,12 +56,14 @@ public final class QuestLedgerUiLayout {
     public static ListLayout list(Frame frame) {
         int padding = frame.compact() ? 12 : 18;
         int headerHeight = frame.tiny() ? 50 : 58;
-        int footerHeight = frame.tiny() ? 38 : 44;
+        // The compact footer contains pagination plus two navigation buttons.
+        int footerHeight = frame.tiny() ? 44 : 44;
         int contentTop = frame.top() + headerHeight;
         int contentBottom = frame.bottom() - footerHeight;
         int available = Math.max(80, contentBottom - contentTop);
-        int perPage = clamp(available / 42, 2, 6);
-        int gap = frame.tiny() ? 4 : 6;
+        // Two taller cards are safer and more readable than three compressed cards on tiny GUIs.
+        int perPage = frame.tiny() ? 2 : clamp(available / 42, 2, 6);
+        int gap = frame.tiny() ? 6 : 6;
         int cardHeight = Math.max(36, (available - Math.max(0, perPage - 1) * gap) / perPage);
         return new ListLayout(padding, headerHeight, footerHeight, contentTop, contentBottom,
                 perPage, cardHeight, gap);
